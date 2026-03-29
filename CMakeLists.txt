@@ -102,7 +102,7 @@ if(CMAKE_CUDA_COMPILER)
     endif()
 
     find_package(CUDAToolkit)
-    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ml/backend/ggml/ggml/src/ggml-cuda)
+    # Backend added via ml/backend/ggml/ggml/src/CMakeLists.txt
     install(TARGETS ggml-cuda
         RUNTIME_DEPENDENCIES
             DIRECTORIES ${CUDAToolkit_BIN_DIR} ${CUDAToolkit_BIN_DIR}/x64 ${CUDAToolkit_LIBRARY_DIR}
@@ -133,7 +133,7 @@ if(CMAKE_HIP_COMPILER)
 
     if(AMDGPU_TARGETS)
         find_package(hip REQUIRED)
-        add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ml/backend/ggml/ggml/src/ggml-hip)
+        # Backend added via ml/backend/ggml/ggml/src/CMakeLists.txt
 
         if (WIN32)
             target_compile_definitions(ggml-hip PRIVATE GGML_CUDA_NO_PEER_COPY)
@@ -167,7 +167,7 @@ endif()
 if(NOT APPLE)
     find_package(Vulkan)
     if(Vulkan_FOUND)
-        add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ml/backend/ggml/ggml/src/ggml-vulkan)
+        # Backend added via ml/backend/ggml/ggml/src/CMakeLists.txt
         install(TARGETS ggml-vulkan
             RUNTIME_DEPENDENCIES
                 PRE_INCLUDE_REGEXES vulkan
