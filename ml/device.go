@@ -231,21 +231,41 @@ func (m BackendMemory) LogValue() slog.Value {
 	return slog.GroupValue(attrs...)
 }
 
+func countLayers(mem []uint64) int {
+	var count int
+	for _, m := range mem {
+		if m > 0 {
+			count++
+		}
+	}
+	return count
+}
+
 // Log prints a high level summary of the memory
 func (m BackendMemory) Log(level slog.Level) {
 	var total uint64
 
+	slog.Log(context.TODO(), level, "--- model load distribution ---")
+
+	// 1. Model Weights Breakdown
 	for _, gpu := range m.GPUs {
 		if sum := sumMemory(gpu.Weights); sum > 0 {
-			slog.Log(context.TODO(), level, "model weights", "device", gpu.Name, "size", format.HumanBytes2(sum))
+			layers := countLayers(gpu.Weights)
+			slog.Log(context.TODO(), level, "model weights", "device", gpu.Name, "layers", layers, "size", format.HumanBytes2(sum))
 			total += sum
 		}
 	}
 	if sum := m.InputWeights + sumMemory(m.CPU.Weights); sum > 0 {
-		slog.Log(context.TODO(), level, "model weights", "device", m.CPU.Name, "size", format.HumanBytes2(sum))
+		layers := countLayers(m.CPU.Weights)
+		deviceName := m.CPU.Name
+		if deviceName == "" {
+			deviceName = "CPU"
+		}
+		slog.Log(context.TODO(), level, "model weights", "device", deviceName, "layers", layers, "size", format.HumanBytes2(sum))
 		total += sum
 	}
 
+	// 2. KV Cache Breakdown
 	for _, gpu := range m.GPUs {
 		if sum := sumMemory(gpu.Cache); sum > 0 {
 			slog.Log(context.TODO(), level, "kv cache", "device", gpu.Name, "size", format.HumanBytes2(sum))
@@ -253,10 +273,15 @@ func (m BackendMemory) Log(level slog.Level) {
 		}
 	}
 	if sum := sumMemory(m.CPU.Cache); sum > 0 {
-		slog.Log(context.TODO(), level, "kv cache", "device", m.CPU.Name, "size", format.HumanBytes2(sum))
+		deviceName := m.CPU.Name
+		if deviceName == "" {
+			deviceName = "CPU"
+		}
+		slog.Log(context.TODO(), level, "kv cache", "device", deviceName, "size", format.HumanBytes2(sum))
 		total += sum
 	}
 
+	// 3. Compute Graph Breakdown
 	for _, gpu := range m.GPUs {
 		if sum := gpu.Graph; sum > 0 {
 			slog.Log(context.TODO(), level, "compute graph", "device", gpu.Name, "size", format.HumanBytes2(sum))
@@ -264,13 +289,18 @@ func (m BackendMemory) Log(level slog.Level) {
 		}
 	}
 	if sum := m.CPU.Graph; sum > 0 {
-		slog.Log(context.TODO(), level, "compute graph", "device", m.CPU.Name, "size", format.HumanBytes2(sum))
+		deviceName := m.CPU.Name
+		if deviceName == "" {
+			deviceName = "CPU"
+		}
+		slog.Log(context.TODO(), level, "compute graph", "device", deviceName, "size", format.HumanBytes2(sum))
 		total += sum
 	}
 
 	if total > 0 {
-		slog.Log(context.TODO(), level, "total memory", "size", format.HumanBytes2(total))
+		slog.Log(context.TODO(), level, "total model footprint", "size", format.HumanBytes2(total))
 	}
+	slog.Log(context.TODO(), level, "-------------------------------")
 }
 
 type DeviceInfo struct {

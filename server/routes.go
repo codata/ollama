@@ -606,6 +606,21 @@ func (s *Server) GenerateHandler(c *gin.Context) {
 				res.TotalDuration = time.Since(checkpointStart)
 				res.LoadDuration = checkpointLoaded.Sub(checkpointStart)
 
+				var promptTPS, evalTPS float64
+				if cr.PromptEvalDuration > 0 {
+					promptTPS = float64(cr.PromptEvalCount) / cr.PromptEvalDuration.Seconds()
+				}
+				if cr.EvalDuration > 0 {
+					evalTPS = float64(cr.EvalCount) / cr.EvalDuration.Seconds()
+				}
+				slog.Info("generation metrics",
+					"model", req.Model,
+					"prompt_eval_count", cr.PromptEvalCount,
+					"prompt_eval_speed", fmt.Sprintf("%.2f tokens/s", promptTPS),
+					"eval_count", cr.EvalCount,
+					"eval_speed", fmt.Sprintf("%.2f tokens/s", evalTPS),
+					"total_duration", res.TotalDuration)
+
 				if !req.Raw {
 					tokens, err := r.Tokenize(c.Request.Context(), prompt+sb.String())
 					if err != nil {
@@ -2408,6 +2423,21 @@ func (s *Server) ChatHandler(c *gin.Context) {
 					res.DoneReason = r.DoneReason.String()
 					res.TotalDuration = time.Since(checkpointStart)
 					res.LoadDuration = checkpointLoaded.Sub(checkpointStart)
+
+					var promptTPS, evalTPS float64
+					if r.PromptEvalDuration > 0 {
+						promptTPS = float64(r.PromptEvalCount) / r.PromptEvalDuration.Seconds()
+					}
+					if r.EvalDuration > 0 {
+						evalTPS = float64(r.EvalCount) / r.EvalDuration.Seconds()
+					}
+					slog.Info("chat metrics",
+						"model", req.Model,
+						"prompt_eval_count", r.PromptEvalCount,
+						"prompt_eval_speed", fmt.Sprintf("%.2f tokens/s", promptTPS),
+						"eval_count", r.EvalCount,
+						"eval_speed", fmt.Sprintf("%.2f tokens/s", evalTPS),
+						"total_duration", res.TotalDuration)
 				}
 
 				if builtinParser != nil {

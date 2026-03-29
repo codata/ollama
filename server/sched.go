@@ -850,12 +850,19 @@ func (runner *runnerRef) LogValue() slog.Value {
 			slog.Any("inference", runner.gpus),
 		)
 	}
+
+	systemRam := uint64(0)
+	if runner.totalSize > runner.vramSize {
+		systemRam = runner.totalSize - runner.vramSize
+	}
+
 	attrs = append(attrs,
-		slog.String("size", format.HumanBytes2(runner.totalSize)),
-		slog.String("vram", format.HumanBytes2(runner.vramSize)),
+		slog.String("total_size", format.HumanBytes2(runner.totalSize)),
+		slog.String("vram_usage", format.HumanBytes2(runner.vramSize)),
+		slog.String("system_ram_usage", format.HumanBytes2(systemRam)),
 		slog.Int("parallel", runner.numParallel),
 		slog.Int("pid", runner.pid),
-		slog.String("model", modelID),
+		slog.String("model_path", modelID),
 	)
 	if runner.Options != nil {
 		attrs = append(attrs, slog.Int("num_ctx", runner.Options.NumCtx))
