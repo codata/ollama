@@ -346,6 +346,10 @@ func (d DeviceInfo) Driver() string {
 // on the device for overhead (e.g. VRAM consumed by context structures independent
 // of model allocations)
 func (d DeviceInfo) MinimumMemory() uint64 {
+	if d.TotalMemory > 0 && d.TotalMemory <= 4*format.GibiByte {
+		// For 4GB cards or smaller, be more aggressive to allow offloading
+		return 256 * format.MebiByte
+	}
 	if d.Library == "Metal" {
 		return 512 * format.MebiByte
 	}

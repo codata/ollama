@@ -2945,6 +2945,19 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
             continue;
         }
 
+        // ASYNC DMA PREFETCH (Simulated via __builtin_prefetch to L2/L3 Cache)
+        // Pre-fetch the weights for Layer N+1 (node_n+1) while we compute node_n
+        if (node_n + 1 < cgraph->n_nodes) {
+            struct ggml_tensor * next_node = cgraph->nodes[node_n + 1];
+            if (next_node->src[0] && next_node->src[0]->data) {
+                char * prefetch_ptr = (char *)next_node->src[0]->data;
+                // Prefetch the first 64KB of the next layer's weights into L2/L3 Cache
+                for (size_t p = 0; p < 65536 && p < ggml_nbytes(next_node->src[0]); p += 64) {
+                    __builtin_prefetch(&prefetch_ptr[p], 0, 3);
+                }
+            }
+        }
+
         ggml_compute_forward(&params, node);
 
 #ifdef OLLAMA_DEBUG

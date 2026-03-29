@@ -119,7 +119,7 @@ type ContextParams struct {
 	c C.struct_llama_context_params
 }
 
-func NewContextParams(numCtx int, batchSize int, numSeqMax int, threads int, flashAttention ml.FlashAttentionType, kvCacheType string) ContextParams {
+func NewContextParams(numCtx int, batchSize int, numSeqMax int, threads int, flashAttention ml.FlashAttentionType, kvCacheType string, offloadKqv bool) ContextParams {
 	params := C.llama_context_default_params()
 	params.n_ctx = C.uint(numCtx)
 	params.n_batch = C.uint(batchSize * numSeqMax)
@@ -138,6 +138,7 @@ func NewContextParams(numCtx int, batchSize int, numSeqMax int, threads int, fla
 	}
 	params.type_k = kvCacheTypeFromStr(strings.ToLower(kvCacheType))
 	params.type_v = kvCacheTypeFromStr(strings.ToLower(kvCacheType))
+	params.offload_kqv = C.bool(offloadKqv)
 
 	return ContextParams{c: params}
 }
@@ -251,6 +252,7 @@ type ModelParams struct {
 	TensorSplit  []float32
 	Progress     func(float32)
 	VocabOnly    bool
+	UseMlock     bool
 }
 
 //export llamaProgressCallback
@@ -267,6 +269,7 @@ func LoadModelFromFile(modelPath string, params ModelParams) (*Model, error) {
 	cparams.main_gpu = C.int32_t(params.MainGpu)
 	cparams.use_mmap = C.bool(params.UseMmap)
 	cparams.vocab_only = C.bool(params.VocabOnly)
+	cparams.use_mlock = C.bool(params.UseMlock)
 
 	var devices []C.ggml_backend_dev_t
 	for _, llamaID := range params.Devices {
