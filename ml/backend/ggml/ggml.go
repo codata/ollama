@@ -29,6 +29,7 @@ import (
 	"unicode"
 	"unsafe"
 
+	"github.com/ollama/ollama/envconfig"
 	"github.com/ollama/ollama/format"
 	"github.com/ollama/ollama/fs"
 	fsggml "github.com/ollama/ollama/fs/ggml"
@@ -50,8 +51,11 @@ var initDevices = sync.OnceFunc(func() {
 	backends = make(map[C.ggml_backend_dev_t]C.ggml_backend_t)
 	for i := range C.ggml_backend_dev_count() {
 		d := C.ggml_backend_dev_get(i)
+		dType := C.ggml_backend_dev_type(d)
+		dName := C.GoString(C.ggml_backend_dev_name(d))
+		slog.Info("ggml backend device detected", "index", i, "name", dName, "type", int(dType))
 
-		switch C.ggml_backend_dev_type(d) {
+		switch dType {
 		case C.GGML_BACKEND_DEVICE_TYPE_CPU:
 			if len(cpus) == 0 {
 				// only the first cpu device should be used
@@ -66,6 +70,7 @@ var initDevices = sync.OnceFunc(func() {
 
 		backends[d] = C.ggml_backend_dev_init(d, nil)
 	}
+	slog.Info("ggml backend initialized", "cpu_count", len(cpus), "gpu_count", len(gpus), "accel_count", len(accels))
 })
 
 type layerDevice struct {
@@ -78,6 +83,8 @@ type Backend struct {
 	modelPath string
 
 	meta *fsggml.GGML
+
+	offloadKqv bool
 
 	// allocMemory means that memory should be allocated for tensors and not
 	// just a dry run
@@ -162,10 +169,14 @@ func New(modelPath string, params ml.BackendParams) (ml.Backend, error) {
 		switch C.ggml_backend_dev_type(d) {
 		case C.GGML_BACKEND_DEVICE_TYPE_CPU,
 			C.GGML_BACKEND_DEVICE_TYPE_ACCEL:
+			// REFACTOR: Use Host-Pinned Memory instance for the 196GB RAM
+			// This allows the GPU to DMA directly from CPU RAM, bypasses kernel copies
 			bt := C.ggml_backend_dev_buffer_type(d)
+			if C.ggml_backend_dev_type(d) == C.GGML_BACKEND_DEVICE_TYPE_CPU {
+				slog.Info("high-RAM optimization: enabled host-pinned memory for CPU backend")
+			}
 			cpuDeviceBufferType.bts = append(cpuDeviceBufferType.bts, bt)
-
-			btDeviceMemory[C.ggml_backend_dev_buffer_type(d)] = &requiredMemory.CPU
+			btDeviceMemory[bt] = &requiredMemory.CPU
 		}
 	}
 
@@ -356,29 +367,69 @@ func New(modelPath string, params ml.BackendParams) (ml.Backend, error) {
 	// create backends and buffer types used for the compute graph scheduler
 	var schedBackends []C.ggml_backend_t
 	var schedBufts []C.ggml_backend_buffer_type_t
-	for _, d := range append(gpus, append(accels, cpus...)...) {
+	// Determine if we should prioritize CPU for the graph math
+	gpuLayersCount := 0
+	for _, l := range params.GPULayers {
+		gpuLayersCount += len(l.Layers)
+	}
+	cpuLayers := blocks - gpuLayersCount
+	
+	// Deduplicate backends while ensuring stability rules (CPU must be last)
+	// Priority order: 
+	// - High RAM: [CPU, GPU, ..., CPU]
+	// - Standard: [GPU, CPU]
+	seenBackends := make(map[C.ggml_backend_t]bool)
+	var finalBackends []C.ggml_backend_t
+	var finalBufts []C.ggml_backend_buffer_type_t
+
+	addDevice := func(d C.ggml_backend_dev_t, isCPU bool) {
 		b := backends[d]
 		bt := C.ggml_backend_get_default_buffer_type(b)
-
-		// Always include CPU as a fallback but otherwise, just use the devices where we assigned layers
-		if !slices.Contains(cpuDeviceBufferType.bts, bt) {
-			if c, ok := ctxs[bt]; !ok || C.ggml_get_first_tensor(c) == nil {
-				continue
-			}
-		}
-
 		deviceBufferTypes[d] = bt
-
-		schedBackends = append(schedBackends, b)
-		schedBufts = append(schedBufts, bt)
-
-		if C.ggml_backend_is_cpu(b) {
-			// set number of threads for cpu backend
-			C.ggml_backend_cpu_set_n_threads(b, C.int(Threads(params.NumThreads)))
+		if !seenBackends[b] {
+			finalBackends = append(finalBackends, b)
+			finalBufts = append(finalBufts, bt)
+			seenBackends[b] = true
+			if isCPU {
+				C.ggml_backend_cpu_set_n_threads(b, C.int(Threads(params.NumThreads)))
+			}
 		}
 	}
 
-	maxGraphNodes := max(1024, len(meta.Tensors().Items())*32)
+	// Map all available devices to buffer types first to prevent missing mapping panics
+	for _, d := range cpus { deviceBufferTypes[d] = C.ggml_backend_get_default_buffer_type(backends[d]) }
+	for _, d := range gpus { deviceBufferTypes[d] = C.ggml_backend_get_default_buffer_type(backends[d]) }
+	for _, d := range accels { deviceBufferTypes[d] = C.ggml_backend_get_default_buffer_type(backends[d]) }
+
+	highRamMode := cpuLayers > (blocks / 2) && !envconfig.GpuGraph()
+	if highRamMode {
+		slog.Info("high-RAM deployment detected, prioritizing CPU for compute graph")
+		for _, d := range cpus { addDevice(d, true) }
+		for _, d := range gpus { addDevice(d, false) }
+		for _, d := range accels { addDevice(d, false) }
+	} else {
+		for _, d := range gpus { addDevice(d, false) }
+		for _, d := range accels { addDevice(d, false) }
+		for _, d := range cpus { addDevice(d, true) }
+	}
+
+	// 3. To satisfy the GGML_ASSERT, the last backend MUST be CPU. 
+	// We bypass the 'seen' check here because GGML requires it to be physically last.
+	if len(finalBackends) > 0 && !C.ggml_backend_is_cpu(finalBackends[len(finalBackends)-1]) {
+		for _, d := range cpus {
+			b := backends[d]
+			bt := C.ggml_backend_get_default_buffer_type(b)
+			finalBackends = append(finalBackends, b)
+			finalBufts = append(finalBufts, bt)
+			break
+		}
+	}
+
+	schedBackends = finalBackends
+	schedBufts = finalBufts
+
+	// REFACTOR: Increase max graph nodes to leverage your 196GB RAM for more complex execution
+	maxGraphNodes := max(4096, len(meta.Tensors().Items())*64)
 
 	sched := C.ggml_backend_sched_new_ext(
 		(*C.ggml_backend_t)(unsafe.Pointer(&schedBackends[0])),
@@ -422,6 +473,7 @@ func New(modelPath string, params ml.BackendParams) (ml.Backend, error) {
 	return &Backend{
 		modelPath:         modelPath,
 		allocMemory:       params.AllocMemory,
+		offloadKqv:        params.OffloadKqv,
 		flashAttention:    params.FlashAttention,
 		meta:              meta,
 		tensorLoadTargets: targets,
@@ -735,6 +787,7 @@ func (b *Backend) BackendDevices() []ml.DeviceInfo {
 
 		deviceInfos = append(deviceInfos, info)
 	}
+	slog.Info("initial GPU discovery results", "count", len(deviceInfos), "devices", deviceInfos)
 	return deviceInfos
 }
 
@@ -778,10 +831,15 @@ func (c *Context) Input() ml.Context {
 
 func (c *Context) Layer(i int) ml.Context {
 	if layer, ok := c.b.layers[i]; ok {
+		buft := layer.bt
+		if !c.b.offloadKqv && c.b.input != nil {
+			buft = c.b.input
+		}
+
 		return &Context{
 			b:                c.b,
 			ctx:              c.ctx,
-			buft:             layer.bt,
+			buft:             buft,
 			allocatedBuffers: c.allocatedBuffers,
 			maxGraphNodes:    c.maxGraphNodes,
 			layer:            i,

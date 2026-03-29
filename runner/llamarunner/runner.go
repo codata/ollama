@@ -836,6 +836,7 @@ func (s *Server) loadModel(
 	flashAttention ml.FlashAttentionType,
 	threads int,
 	multiUserCache bool,
+	offloadKqv bool,
 ) {
 	var err error
 	s.model, err = llama.LoadModelFromFile(mpath, params)
@@ -843,7 +844,7 @@ func (s *Server) loadModel(
 		panic(err)
 	}
 
-	ctxParams := llama.NewContextParams(kvSize, s.batchSize, s.parallel, threads, flashAttention, kvCacheType)
+	ctxParams := llama.NewContextParams(kvSize, s.batchSize, s.parallel, threads, flashAttention, kvCacheType, offloadKqv)
 	s.lc, err = llama.NewContextWithModel(s.model, ctxParams)
 	if err != nil {
 		panic(err)
@@ -924,6 +925,7 @@ func (s *Server) load(w http.ResponseWriter, r *http.Request) {
 			NumGpuLayers: numGPU,
 			MainGpu:      req.MainGPU,
 			UseMmap:      req.UseMmap && len(req.LoraPath) == 0,
+			UseMlock:     req.UseMlock,
 			TensorSplit:  tensorSplit,
 			Progress: func(progress float32) {
 				s.progress = progress
@@ -931,7 +933,7 @@ func (s *Server) load(w http.ResponseWriter, r *http.Request) {
 		}
 
 		s.status = llm.ServerStatusLoadingModel
-		go s.loadModel(params, s.modelPath, req.LoraPath, req.ProjectorPath, req.KvSize, req.KvCacheType, req.FlashAttention, req.NumThreads, req.MultiUserCache)
+		go s.loadModel(params, s.modelPath, req.LoraPath, req.ProjectorPath, req.KvSize, req.KvCacheType, req.FlashAttention, req.NumThreads, req.MultiUserCache, req.OffloadKqv)
 
 	case llm.LoadOperationClose:
 		// No-op for us

@@ -162,19 +162,36 @@ func NewLlamaServer(systemInfo ml.SystemInfo, gpus []ml.DeviceInfo, modelPath st
 		}
 	}
 
-	// Verify the requested context size is <= the model training size
-	trainCtx := f.KV().ContextLength()
-	if opts.NumCtx > int(trainCtx) && trainCtx > 0 {
-		slog.Warn("requested context size too large for model", "num_ctx", opts.NumCtx, "n_ctx_train", trainCtx)
-		opts.NumCtx = int(trainCtx)
+	// Force overrides from environment variables
+	if envGpu := envconfig.NumGPU(); envGpu > 0 {
+		opts.NumGPU = int(envGpu)
+	}
+	if envBatch := envconfig.NumBatch(); envBatch > 0 {
+		opts.NumBatch = int(envBatch)
+	}
+	if envCtx := envconfig.NumCtx(); envCtx > 0 {
+		opts.NumCtx = int(envCtx)
+	} else if envCtx := envconfig.ContextLength(); envCtx > 0 {
+		opts.NumCtx = int(envCtx)
 	}
 
 	opts.NumBatch = min(opts.NumBatch, opts.NumCtx)
 
-	loadRequest := LoadRequest{LoraPath: adapters, KvSize: opts.NumCtx * numParallel, BatchSize: opts.NumBatch, Parallel: numParallel, MultiUserCache: envconfig.MultiUserCache()}
+	loadRequest := LoadRequest{
+		LoraPath:       adapters,
+		KvSize:         opts.NumCtx * numParallel,
+		BatchSize:      opts.NumBatch,
+		Parallel:       numParallel,
+		MultiUserCache: envconfig.MultiUserCache(),
+		OffloadKqv:     !envconfig.CpuKv(),
+		UseMlock:       envconfig.MLock(),
+		UseMmap:        envconfig.UseMmap(true),
+	}
 
 	defaultThreads := systemInfo.ThreadCount
-	if opts.NumThread > 0 {
+	if envThreads := envconfig.NumThread(); envThreads > 0 {
+		loadRequest.NumThreads = int(envThreads)
+	} else if opts.NumThread > 0 {
 		loadRequest.NumThreads = opts.NumThread
 	} else if defaultThreads > 0 {
 		loadRequest.NumThreads = defaultThreads
@@ -484,6 +501,8 @@ type LoadRequest struct {
 	ProjectorPath string
 	MainGPU       int
 	UseMmap       bool
+	UseMlock      bool
+	OffloadKqv    bool
 }
 
 type LoadResponse struct {
@@ -593,16 +612,21 @@ func (s *llamaServer) Load(ctx context.Context, systemInfo ml.SystemInfo, system
 		kvTotal += kvLayer
 	}
 
-	if graphPartialOffload == 0 {
-		headsKV := s.ggml.KV().HeadCountKVMin()
-		if headsKV == 0 {
-			headsKV = 1
+	if s.loadRequest.OffloadKqv {
+		if graphPartialOffload == 0 {
+			headsKV := s.ggml.KV().HeadCountKVMin()
+			if headsKV == 0 {
+				headsKV = 1
+			}
+			gqa := s.ggml.KV().HeadCountMax() / headsKV
+			graphPartialOffload = gqa * kvTotal / 6
 		}
-		gqa := s.ggml.KV().HeadCountMax() / headsKV
-		graphPartialOffload = gqa * kvTotal / 6
-	}
-	if graphFullOffload == 0 {
-		graphFullOffload = graphPartialOffload
+		if graphFullOffload == 0 {
+			graphFullOffload = graphPartialOffload
+		}
+	} else {
+		graphPartialOffload = 0
+		graphFullOffload = 0
 	}
 
 	// On Metal there's no partial offload overhead
@@ -692,6 +716,8 @@ func (s *llamaServer) Load(ctx context.Context, systemInfo ml.SystemInfo, system
 		(s.options.UseMMap != nil && !*s.options.UseMMap) {
 		s.loadRequest.UseMmap = false
 	}
+	s.loadRequest.UseMlock = envconfig.MLock()
+	s.loadRequest.OffloadKqv = !envconfig.CpuKv()
 
 	if err := s.waitUntilRunnerLaunched(ctx); err != nil {
 		return nil, err
@@ -763,6 +789,9 @@ func (s *ollamaServer) Load(ctx context.Context, systemInfo ml.SystemInfo, gpus 
 	if err != nil {
 		return nil, err
 	}
+
+	s.loadRequest.UseMlock = envconfig.MLock()
+	s.loadRequest.OffloadKqv = !envconfig.CpuKv()
 
 	if err := s.waitUntilRunnerLaunched(ctx); err != nil {
 		return nil, err
@@ -928,27 +957,33 @@ func (s *llmServer) createLayout(systemInfo ml.SystemInfo, systemGPUs []ml.Devic
 			Cache:   make([]uint64, s.totalLayers),
 		}}
 	}
-	gpuLayers, layers := s.buildLayout(systemGPUs, memory, requireFull, backoff)
-	err := s.verifyLayout(systemInfo, systemGPUs, memory, requireFull, gpuLayers, layers)
+	gpuLayers, layers, cache := s.buildLayout(systemGPUs, memory, requireFull, backoff)
+	err := s.verifyLayout(systemInfo, systemGPUs, memory, requireFull, gpuLayers, layers, cache)
 	if err != nil {
 		return nil, err
 	}
 	return gpuLayers, nil
 }
 
-func (s *llmServer) buildLayout(systemGPUs []ml.DeviceInfo, memory *ml.BackendMemory, requireFull bool, backoff float32) (ml.GPULayersList, []uint64) {
+func (s *llmServer) buildLayout(systemGPUs []ml.DeviceInfo, memory *ml.BackendMemory, requireFull bool, backoff float32) (ml.GPULayersList, []uint64, []uint64) {
 	gpus := append(make([]ml.DeviceInfo, 0, len(systemGPUs)), systemGPUs...)
 	sort.Sort(sort.Reverse(ml.ByFreeMemory(gpus)))
 
 	layers := make([]uint64, len(memory.CPU.Weights))
+	cache := make([]uint64, len(memory.CPU.Weights))
 	for i := range layers {
 		for j := range memory.GPUs {
 			layers[i] += memory.GPUs[j].Weights[i]
-			layers[i] += memory.GPUs[j].Cache[i]
+			cache[i] += memory.GPUs[j].Cache[i]
 		}
 		layers[i] += memory.CPU.Weights[i]
-		layers[i] += memory.CPU.Cache[i]
-		logutil.Trace("layer to assign", "layer", i, "size", format.HumanBytes2(layers[i]))
+		cache[i] += memory.CPU.Cache[i]
+
+		total := layers[i]
+		if s.loadRequest.OffloadKqv {
+			total += cache[i]
+		}
+		logutil.Trace("layer to assign", "layer", i, "weight", format.HumanBytes2(layers[i]), "cache", format.HumanBytes2(cache[i]), "total", format.HumanBytes2(total))
 	}
 
 	gpuLayers := ml.GPULayersList{}
@@ -989,16 +1024,24 @@ func (s *llmServer) buildLayout(systemGPUs []ml.DeviceInfo, memory *ml.BackendMe
 			}
 		}
 
-		libraryGpuLayers := assignLayers(layers, gl, requireFull, s.options.NumGPU, lastUsedGPU)
+		assignmentLayers := layers
+		if s.loadRequest.OffloadKqv {
+			assignmentLayers = make([]uint64, len(layers))
+			for i := range layers {
+				assignmentLayers[i] = layers[i] + cache[i]
+			}
+		}
+
+		libraryGpuLayers := assignLayers(assignmentLayers, gl, requireFull, s.options.NumGPU, lastUsedGPU)
 		if libraryGpuLayers.Sum() > gpuLayers.Sum() {
 			gpuLayers = libraryGpuLayers
 		}
 	}
-	return gpuLayers, layers
+	return gpuLayers, layers, cache
 }
 
 // verifyLayout ensures that we don't exceed limits, such as requirements about partial offloading or system memory
-func (s *llmServer) verifyLayout(systemInfo ml.SystemInfo, systemGPUs []ml.DeviceInfo, memory *ml.BackendMemory, requireFull bool, gpuLayers ml.GPULayersList, layers []uint64) error {
+func (s *llmServer) verifyLayout(systemInfo ml.SystemInfo, systemGPUs []ml.DeviceInfo, memory *ml.BackendMemory, requireFull bool, gpuLayers ml.GPULayersList, layers []uint64, cache []uint64) error {
 	// These sizes will only increase as we go through additional iterations and get additional information.
 	cpuSize := memory.InputWeights + memory.CPU.Graph
 	var vramSize uint64
@@ -1013,15 +1056,20 @@ func (s *llmServer) verifyLayout(systemInfo ml.SystemInfo, systemGPUs []ml.Devic
 
 nextLayer:
 	for i := range layers {
+		layerSize := layers[i]
+		if s.loadRequest.OffloadKqv {
+			layerSize += cache[i]
+		}
+
 		for _, g := range gpuLayers {
 			for _, gl := range g.Layers {
 				if i == gl {
-					vramSize += layers[i]
+					vramSize += layerSize
 					continue nextLayer
 				}
 			}
 		}
-		cpuSize += layers[i]
+		cpuSize += layerSize
 	}
 
 	if requireFull {

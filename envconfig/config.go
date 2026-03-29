@@ -211,6 +211,22 @@ var (
 	EnableVulkan = Bool("OLLAMA_VULKAN")
 	// NoCloudEnv checks the OLLAMA_NO_CLOUD environment variable.
 	NoCloudEnv = Bool("OLLAMA_NO_CLOUD")
+	// MLock enables the use of mlock to keep the model in RAM.
+	MLock = Bool("OLLAMA_MLOCK")
+	// CpuKv enables the use of CPU for the K/V cache.
+	CpuKv = Bool("OLLAMA_CPU_KV")
+	// NumBatch sets the default batch size
+	NumBatch = Uint("OLLAMA_NUM_BATCH", 0)
+	// NumCtx sets the default context length
+	NumCtx = Uint("OLLAMA_NUM_CTX", 0)
+	// NumThread sets the default number of threads
+	NumThread = Uint("OLLAMA_NUM_THREAD", 0)
+	// GpuGraph enables forcing the compute graph to the GPU
+	GpuGraph = Bool("OLLAMA_GPU_GRAPH")
+	// UseMmap enables the use of mmap to load the model.
+	UseMmap = BoolWithDefault("OLLAMA_MMAP")
+	// NumGPU sets the number of layers to offload to the GPU
+	NumGPU = Uint("OLLAMA_NUM_GPU", 0)
 )
 
 func String(s string) func() string {
@@ -298,9 +314,17 @@ func AsMap() map[string]EnvVar {
 		"OLLAMA_SCHED_SPREAD":      {"OLLAMA_SCHED_SPREAD", SchedSpread(), "Always schedule model across all GPUs"},
 		"OLLAMA_MULTIUSER_CACHE":   {"OLLAMA_MULTIUSER_CACHE", MultiUserCache(), "Optimize prompt caching for multi-user scenarios"},
 		"OLLAMA_CONTEXT_LENGTH":    {"OLLAMA_CONTEXT_LENGTH", ContextLength(), "Context length to use unless otherwise specified (default: 4k/32k/256k based on VRAM)"},
+		"OLLAMA_NUM_BATCH":         {"OLLAMA_NUM_BATCH", NumBatch(), "Batch size to use unless otherwise specified"},
+		"OLLAMA_NUM_CTX":           {"OLLAMA_NUM_CTX", NumCtx(), "Context length to use unless otherwise specified"},
+		"OLLAMA_NUM_THREAD":        {"OLLAMA_NUM_THREAD", NumThread(), "Number of threads to use for generation"},
+		"OLLAMA_GPU_GRAPH":         {"OLLAMA_GPU_GRAPH", GpuGraph(), "Force the compute graph to use the GPU even in high-RAM deployments"},
+		"OLLAMA_MMAP":              {"OLLAMA_MMAP", UseMmap(true), "Use memory mapping to load the model"},
+		"OLLAMA_NUM_GPU":           {"OLLAMA_NUM_GPU", NumGPU(), "Number of layers to offload to the GPU"},
 		"OLLAMA_EDITOR":            {"OLLAMA_EDITOR", Editor(), "Path to editor for interactive prompt editing (Ctrl+G)"},
 		"OLLAMA_NEW_ENGINE":        {"OLLAMA_NEW_ENGINE", NewEngine(), "Enable the new Ollama engine"},
 		"OLLAMA_REMOTES":           {"OLLAMA_REMOTES", Remotes(), "Allowed hosts for remote models (default \"ollama.com\")"},
+		"OLLAMA_MLOCK":             {"OLLAMA_MLOCK", MLock(), "Force the system to keep the model in RAM"},
+		"OLLAMA_CPU_KV":            {"OLLAMA_CPU_KV", CpuKv(), "Offload the K/V cache to the CPU"},
 
 		// Informational
 		"HTTP_PROXY":  {"HTTP_PROXY", String("HTTP_PROXY")(), "HTTP proxy"},

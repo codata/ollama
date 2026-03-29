@@ -117,6 +117,7 @@ func GPUDevices(ctx context.Context, runners []ml.FilteredRunnerDiscovery) []ml.
 			// For this pass, we retain duplicates in case any are incompatible with some libraries
 			devices = append(devices, bootstrapDevices(ctx1stPass, dirs, nil)...)
 		}
+		slog.Info("server-side GPU discovery completed", "count", len(devices), "devices", devices)
 
 		// In the second pass, we more deeply initialize the GPUs to weed out devices that
 		// aren't supported by a given library.  We run this phase in parallel to speed up discovery.
@@ -434,7 +435,7 @@ func bootstrapDevices(ctx context.Context, ollamaLibDirs []string, extraEnvs map
 	}
 	start := time.Now()
 	defer func() {
-		slog.Debug("bootstrap discovery took", "duration", time.Since(start), "OLLAMA_LIBRARY_PATH", ollamaLibDirs, "extra_envs", extraEnvs)
+		slog.Info("bootstrap discovery took", "duration", time.Since(start), "OLLAMA_LIBRARY_PATH", ollamaLibDirs, "extra_envs", extraEnvs)
 	}()
 
 	logutil.Trace("starting runner for device discovery", "libDirs", ollamaLibDirs, "extraEnvs", extraEnvs)
