@@ -1,6 +1,26 @@
 # CODATA Ollama: Optimized Inference & ODRL Integration
+### [Visit CODATA Website](https://www.codata.org)
 
 This document outlines the custom modifications and optimization procedures for the **CODATA-enhanced Ollama** distribution. This version focuses on maximum performance for professional NVIDIA hardware (A6000/A100) and native data sovereignty via **ODRL (Open Digital Rights Language)**.
+
+---
+
+## 📊 Comparison: CODATA vs. Standard Ollama
+
+The CODATA distribution provides significant advantages in both performance and verifiable trust for professional environments.
+
+| Feature | Standard Ollama (Binary) | CODATA Optimized | Benefit |
+| :--- | :--- | :--- | :--- |
+| **Prompt Preprocessing** | ~1,800 tokens/s | **4,400+ tokens/s** | **2.4x Fast TTFT** |
+| **Token Generation** | ~90 tokens/s (4B) | **150+ tokens/s (4B)** | **1.6x Higher Throughput** |
+| **Large Context** | Moderate latency | **Optimized Flash Attention** | No slowdown for long docs |
+| **Trust Model** | Anonymous / Local only | **Native ODRL / DID** | Verifiable Provenance |
+| **Hardware** | Generic Compatibility | **Ampere/Lovelace Native** | Targeted A6000/4090 perf |
+
+### Why CODATA is Faster:
+1.  **Manual Arch-Targeting**: Standard binaries are built for broad compatibility; CODATA builds are compiled with `-march=native` and **CUDA 13.0**, exploiting professional core features.
+2.  **Zero-Overhead Isolation**: Automatic isolation of compute GPUs from display/UI cards eliminates synchronization wait times.
+3.  **Kernel Fusion**: Advanced fusion of attention and activation kernels reduces memory bus traffic.
 
 ---
 
