@@ -32,7 +32,13 @@ The CODATA distribution provides significant advantages in both performance and 
 - **GCC/G++**: 11 or higher
 - **CUDA Toolkit**: 12.x or 13.0
 
-### 2. Environment Setup
+### 2. Clone the Repository
+```bash
+git clone https://github.com/codata/ollama
+cd ollama
+```
+
+### 3. Environment Setup
 If you are installing CUDA to a non-standard path (e.g., a RAID drive), set your paths accordingly:
 ```bash
 export CUDA_HOME=/nas/C19M/cuda-toolkit/13.0
