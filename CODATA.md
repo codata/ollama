@@ -95,7 +95,7 @@ Configured to utilize **128+ concurrent threads** for the compute graph, ensurin
 
 ## 🛡️ ODRL & Decentralized Identity
 
-This version integrates the **ODRL framework** for verifiable AI provenance.
+This version integrates the **ODRL framework** for verifiable AI provenance. Detailed documentation can be found in the [ODRL.md](https://github.com/codata/ollama/blob/main/ODRL.md) guide.
 
 ### 1. Identity Discovery
 The server identifies itself via a **Decentralized Identifier (DID)** stored in `~/.odrl/did.json`.
