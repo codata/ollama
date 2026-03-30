@@ -45,6 +45,7 @@ import (
 	"github.com/ollama/ollama/middleware"
 	"github.com/ollama/ollama/model/parsers"
 	"github.com/ollama/ollama/model/renderers"
+	"github.com/ollama/ollama/odrl"
 	"github.com/ollama/ollama/server/internal/client/ollama"
 	"github.com/ollama/ollama/server/internal/registry"
 	"github.com/ollama/ollama/template"
@@ -578,6 +579,7 @@ func (s *Server) GenerateHandler(c *gin.Context) {
 					EvalDuration:       cr.EvalDuration,
 				},
 				Logprobs: toAPILogprobs(cr.Logprobs),
+				DID:      odrl.GetDID(),
 			}
 
 			if builtinParser != nil {
@@ -1268,6 +1270,7 @@ func GetModelInfo(req api.ShowRequest) (*api.ShowResponse, error) {
 		// Several integrations crash on a nil/omitempty+empty ModelInfo, so by
 		// default we return an empty map.
 		ModelInfo: make(map[string]any),
+		DID:       odrl.GetDID(),
 	}
 
 	if m.Config.RemoteHost != "" {
@@ -1441,6 +1444,7 @@ func (s *Server) ListHandler(c *gin.Context) {
 				ParameterSize:     cf.ModelType,
 				QuantizationLevel: cf.FileType,
 			},
+			DID: odrl.GetDID(),
 		})
 	}
 
@@ -1685,6 +1689,7 @@ func (s *Server) GenerateRoutes(rc *ollama.Registry) (http.Handler, error) {
 	r.HEAD("/api/version", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"version": version.Version}) })
 	r.GET("/api/version", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"version": version.Version}) })
 	r.GET("/api/status", s.StatusHandler)
+	r.GET("/api/did", s.DIDHandler)
 
 	// Local model cache management (new implementation is at end of function)
 	r.POST("/api/pull", s.PullHandler)
@@ -1952,6 +1957,10 @@ func (s *Server) StatusHandler(c *gin.Context) {
 	})
 }
 
+func (s *Server) DIDHandler(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"did": odrl.GetDID()})
+}
+
 func (s *Server) WhoamiHandler(c *gin.Context) {
 	// todo allow other hosts
 	u, err := url.Parse("https://ollama.com")
@@ -2037,6 +2046,7 @@ func (s *Server) PsHandler(c *gin.Context) {
 			Digest:    model.Digest,
 			Details:   modelDetails,
 			ExpiresAt: v.expiresAt,
+			DID:       odrl.GetDID(),
 		}
 		if v.llama != nil {
 			mr.ContextLength = v.llama.ContextLength()
@@ -2417,6 +2427,7 @@ func (s *Server) ChatHandler(c *gin.Context) {
 						EvalDuration:       r.EvalDuration,
 					},
 					Logprobs: toAPILogprobs(r.Logprobs),
+					DID:      odrl.GetDID(),
 				}
 
 				if r.Done {

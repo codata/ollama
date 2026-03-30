@@ -128,6 +128,9 @@ type GenerateRequest struct {
 	// Valid values are 0-20. Default is 0 (only return the selected token's logprob).
 	TopLogprobs int `json:"top_logprobs,omitempty"`
 
+	// DID is the Decentralized Identifier of the requester or asset for ODRL support.
+	DID string `json:"did,omitempty"`
+
 	// Experimental: Image generation fields (may change or be removed)
 
 	// Width is the width of the generated image in pixels.
@@ -191,6 +194,9 @@ type ChatRequest struct {
 	// each with an associated log probability. Only applies when Logprobs is true.
 	// Valid values are 0-20. Default is 0 (only return the selected token's logprob).
 	TopLogprobs int `json:"top_logprobs,omitempty"`
+
+	// DID is the Decentralized Identifier of the requester or asset for ODRL support.
+	DID string `json:"did,omitempty"`
 }
 
 type Tools []Tool
@@ -218,6 +224,7 @@ type Message struct {
 	ToolCalls  []ToolCall  `json:"tool_calls,omitempty"`
 	ToolName   string      `json:"tool_name,omitempty"`
 	ToolCallID string      `json:"tool_call_id,omitempty"`
+	DID        string      `json:"did,omitempty"`
 }
 
 func (m *Message) UnmarshalJSON(b []byte) error {
@@ -558,6 +565,9 @@ type ChatResponse struct {
 	// if requested via the Logprobs parameter.
 	Logprobs []Logprob `json:"logprobs,omitempty"`
 
+	// DID is the Decentralized Identifier of the model or response for ODRL support.
+	DID string `json:"did,omitempty"`
+
 	Metrics
 }
 
@@ -755,6 +765,7 @@ type ShowResponse struct {
 	Capabilities  []model.Capability `json:"capabilities,omitempty"`
 	ModifiedAt    time.Time          `json:"modified_at,omitempty"`
 	Requires      string             `json:"requires,omitempty"`
+	DID           string             `json:"did,omitempty"`
 }
 
 // CopyRequest is the request passed to [Client.Copy].
@@ -816,6 +827,7 @@ type ListModelResponse struct {
 	Size        int64        `json:"size"`
 	Digest      string       `json:"digest"`
 	Details     ModelDetails `json:"details,omitempty"`
+	DID         string       `json:"did,omitempty"`
 }
 
 // ProcessModelResponse is a single model description in [ProcessResponse].
@@ -828,6 +840,7 @@ type ProcessModelResponse struct {
 	ExpiresAt     time.Time    `json:"expires_at"`
 	SizeVRAM      int64        `json:"size_vram"`
 	ContextLength int          `json:"context_length"`
+	DID           string       `json:"did,omitempty"`
 }
 
 type TokenResponse struct {
@@ -874,6 +887,9 @@ type GenerateResponse struct {
 	// Context is an encoding of the conversation used in this response; this
 	// can be sent in the next request to keep a conversational memory.
 	Context []int `json:"context,omitempty"`
+
+	// DID is the Decentralized Identifier of the model or response for ODRL support.
+	DID string `json:"did,omitempty"`
 
 	Metrics
 
