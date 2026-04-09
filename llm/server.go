@@ -81,6 +81,7 @@ type LlamaServer interface {
 	GetDeviceInfos(ctx context.Context) []ml.DeviceInfo
 	HasExited() bool
 	ContextLength() int
+	WeightIndex() any
 }
 
 // llmServer is an instance of a runner hosting a single model
@@ -106,6 +107,8 @@ type llmServer struct {
 	loadProgress float32
 
 	sem *semaphore.Weighted
+
+	weightIndex any // In-memory index of model weights (e.g. embeddings)
 }
 
 type llamaServer struct {
@@ -172,7 +175,17 @@ func NewLlamaServer(systemInfo ml.SystemInfo, gpus []ml.DeviceInfo, modelPath st
 
 	opts.NumBatch = min(opts.NumBatch, opts.NumCtx)
 
-	loadRequest := LoadRequest{LoraPath: adapters, KvSize: opts.NumCtx * numParallel, BatchSize: opts.NumBatch, Parallel: numParallel, MultiUserCache: envconfig.MultiUserCache()}
+	loadRequest := LoadRequest{
+		LoraPath:         adapters,
+		KvSize:           opts.NumCtx * numParallel,
+		BatchSize:        opts.NumBatch,
+		Parallel:         numParallel,
+		MultiUserCache:   envconfig.MultiUserCache(),
+		OffloadKqv:       !envconfig.CpuKv(),
+		UseMlock:         envconfig.MLock(),
+		UseMmap:          envconfig.UseMmap(true),
+		SpeculativeModel: opts.SpeculativeModel,
+	}
 
 	defaultThreads := systemInfo.ThreadCount
 	if opts.NumThread > 0 {
@@ -294,6 +307,14 @@ func NewLlamaServer(systemInfo ml.SystemInfo, gpus []ml.DeviceInfo, modelPath st
 		totalLayers:    f.KV().BlockCount() + 1,
 		loadStart:      time.Now(),
 		done:           make(chan struct{}),
+	}
+
+	if f != nil {
+		if idx, err := BuildWeightIndex(modelPath, f); err == nil {
+			s.weightIndex = idx
+		} else {
+			slog.Warn("failed to build weight index", "error", err)
+		}
 	}
 
 	if err != nil {
@@ -484,15 +505,16 @@ func (o LoadOperation) String() string {
 type LoadRequest struct {
 	Operation LoadOperation
 
-	LoraPath       []string
-	Parallel       int
-	BatchSize      int
-	FlashAttention ml.FlashAttentionType
-	KvSize         int
-	KvCacheType    string
-	NumThreads     int
-	GPULayers      ml.GPULayersList
-	MultiUserCache bool
+	LoraPath         []string
+	Parallel         int
+	BatchSize        int
+	FlashAttention   ml.FlashAttentionType
+	KvSize           int
+	KvCacheType      string
+	NumThreads       int
+	GPULayers        ml.GPULayersList
+	MultiUserCache   bool
+	SpeculativeModel string
 
 	// Legacy fields - not used with the Ollama engine
 	ProjectorPath string
@@ -1906,6 +1928,10 @@ func (s *llmServer) VRAMByGPU(id ml.DeviceID) uint64 {
 
 func (s *llmServer) ContextLength() int {
 	return s.options.NumCtx
+}
+
+func (s *llmServer) WeightIndex() any {
+	return s.weightIndex
 }
 
 func (s *ollamaServer) GetDeviceInfos(ctx context.Context) []ml.DeviceInfo {

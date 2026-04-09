@@ -432,6 +432,17 @@ func (s *Scheduler) load(req *LlmRequest, systemInfo ml.SystemInfo, gpus []ml.De
 	llama := s.activeLoading
 
 	if llama == nil {
+		if req.opts.SpeculativeModel != "" {
+			specModel, err := GetModel(req.opts.SpeculativeModel)
+			if err != nil {
+				slog.Warn("failed to resolve speculative model", "name", req.opts.SpeculativeModel, "error", err)
+				req.opts.SpeculativeModel = ""
+			} else {
+				req.opts.SpeculativeModel = specModel.ModelPath
+				slog.Info("resolved speculative model", "name", specModel.ShortName, "path", specModel.ModelPath)
+			}
+		}
+
 		var err error
 		if !req.model.IsMLX() {
 			f, loadErr := llm.LoadModel(req.model.ModelPath, 1024)
