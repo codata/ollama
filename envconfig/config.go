@@ -236,6 +236,12 @@ var (
 	EnableVulkan = Bool("OLLAMA_VULKAN")
 	// NoCloudEnv checks the OLLAMA_NO_CLOUD environment variable.
 	NoCloudEnv = Bool("OLLAMA_NO_CLOUD")
+	// CpuKv enables the KV cache on the CPU
+	CpuKv = Bool("OLLAMA_CPU_KV")
+	// MLock enables the use of mlock to prevent swapping
+	MLock = Bool("OLLAMA_MLOCK")
+	// UseMmap enables the use of mmap for model loading
+	UseMmap = BoolWithDefault("OLLAMA_MMAP")
 )
 
 func String(s string) func() string {

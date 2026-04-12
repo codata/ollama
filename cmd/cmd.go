@@ -1426,6 +1426,7 @@ type runOptions struct {
 	Think          *api.ThinkValue
 	HideThinking   bool
 	ShowConnect    bool
+	IndexCommand   string
 }
 
 func (r runOptions) Copy() runOptions {
@@ -1644,6 +1645,13 @@ func chat(cmd *cobra.Command, opts runOptions) (*api.Message, error) {
 		opts.Format = `"` + opts.Format + `"`
 	}
 
+	if opts.IndexCommand != "" {
+		if opts.Options == nil {
+			opts.Options = make(map[string]any)
+		}
+		opts.Options["index_command"] = opts.IndexCommand
+	}
+
 	req := &api.ChatRequest{
 		Model:    opts.Model,
 		Messages: opts.Messages,
@@ -1683,6 +1691,11 @@ func chat(cmd *cobra.Command, opts runOptions) (*api.Message, error) {
 
 	if verbose {
 		latest.Summary()
+	} else if latest.EvalCount > 0 && latest.EvalDuration > 0 {
+		if latest.PromptEvalCount > 0 && latest.PromptEvalDuration > 0 {
+			fmt.Fprintf(os.Stderr, "prompt eval rate: %.2f tokens/s\n", float64(latest.PromptEvalCount)/latest.PromptEvalDuration.Seconds())
+		}
+		fmt.Fprintf(os.Stderr, "eval rate:        %.2f tokens/s\n", float64(latest.EvalCount)/latest.EvalDuration.Seconds())
 	}
 
 	return &api.Message{Role: role, Thinking: thinkingContent.String(), Content: fullResponse.String()}, nil
@@ -1776,6 +1789,13 @@ func generate(cmd *cobra.Command, opts runOptions) error {
 		opts.Format = `"` + opts.Format + `"`
 	}
 
+	if opts.IndexCommand != "" {
+		if opts.Options == nil {
+			opts.Options = make(map[string]any)
+		}
+		opts.Options["index_command"] = opts.IndexCommand
+	}
+
 	request := api.GenerateRequest{
 		Model:     opts.Model,
 		Prompt:    opts.Prompt,
@@ -1811,6 +1831,11 @@ func generate(cmd *cobra.Command, opts runOptions) error {
 
 	if verbose {
 		latest.Summary()
+	} else if latest.EvalCount > 0 && latest.EvalDuration > 0 {
+		if latest.PromptEvalCount > 0 && latest.PromptEvalDuration > 0 {
+			fmt.Fprintf(os.Stderr, "prompt eval rate: %.2f tokens/s\n", float64(latest.PromptEvalCount)/latest.PromptEvalDuration.Seconds())
+		}
+		fmt.Fprintf(os.Stderr, "eval rate:        %.2f tokens/s\n", float64(latest.EvalCount)/latest.EvalDuration.Seconds())
 	}
 
 	ctx = context.WithValue(cmd.Context(), generateContextKey("context"), latest.Context)

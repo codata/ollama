@@ -389,6 +389,10 @@ func (s *Server) ContextLength() int {
 	return 0
 }
 
+func (s *Server) WeightIndex() any {
+	return nil
+}
+
 // Embedding returns embeddings for the input.
 func (s *Server) Embedding(ctx context.Context, input string) ([]float32, int, error) {
 	return nil, 0, errors.New("embeddings not supported for MLX models")

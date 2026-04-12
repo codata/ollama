@@ -607,6 +607,8 @@ type Runner struct {
 	UseMMap          *bool  `json:"use_mmap,omitempty"`
 	NumThread        int    `json:"num_thread,omitempty"`
 	SpeculativeModel string `json:"speculative_model,omitempty"`
+	Optimization     string `json:"optimization,omitempty"`
+	IndexCommand     string `json:"index_command,omitempty"`
 }
 
 // EmbedRequest is the request passed to [Client.Embed].

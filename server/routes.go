@@ -2442,6 +2442,23 @@ func (s *Server) ChatHandler(c *gin.Context) {
 					res.DoneReason = r.DoneReason.String()
 					res.TotalDuration = time.Since(checkpointStart)
 					res.LoadDuration = checkpointLoaded.Sub(checkpointStart)
+
+					var promptEvalSpeed, evalSpeed string
+					if res.PromptEvalDuration > 0 {
+						promptEvalSpeed = fmt.Sprintf("%.2f tokens/s", float64(res.PromptEvalCount)/res.PromptEvalDuration.Seconds())
+					}
+					if res.EvalDuration > 0 {
+						evalSpeed = fmt.Sprintf("%.2f tokens/s", float64(res.EvalCount)/res.EvalDuration.Seconds())
+					}
+
+					slog.Info("chat metrics",
+						"model", req.Model,
+						"prompt_eval_count", res.PromptEvalCount,
+						"prompt_eval_speed", promptEvalSpeed,
+						"eval_count", res.EvalCount,
+						"eval_speed", evalSpeed,
+						"total_duration", res.TotalDuration,
+					)
 				}
 
 				if builtinParser != nil {

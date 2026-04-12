@@ -283,6 +283,10 @@ func (c *Client) ContextLength() int {
 	return int(c.contextLength.Load())
 }
 
+func (c *Client) WeightIndex() any {
+	return nil
+}
+
 // Detokenize implements llm.LlamaServer.
 func (c *Client) Detokenize(ctx context.Context, tokens []int) (string, error) {
 	return "", errors.New("not supported")

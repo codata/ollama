@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/ollama/ollama/api"
@@ -19,6 +21,55 @@ func prefillChunkSize() int {
 }
 
 func (r *Runner) TextGenerationPipeline(request Request) error {
+	ctx := request.Ctx
+	
+	// Handle index commands immediately
+	if request.Options.IndexCommand != "" {
+		if r.Index == nil {
+			select {
+			case request.Responses <- CompletionResponse{Content: "Index not available for this model.\n", Done: true}:
+				return nil
+			default:
+				return nil
+			}
+		}
+
+		if request.Options.IndexCommand == "status" {
+			select {
+			case request.Responses <- CompletionResponse{Content: r.Index.StatusText() + "\n", Done: true}:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+
+		if request.Options.IndexCommand == "rebuild" {
+			status := r.Index.StatusText()
+			// Send initial status
+			select {
+			case request.Responses <- CompletionResponse{Content: "Triggering rebuild. Current state: " + status + "\n"}:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+
+			r.Index.Reset()
+			
+			// Save the reset index immediately
+			indexPath := filepath.Join("index", r.Index.ModelPath+".index")
+			if err := r.Index.Save(indexPath); err != nil {
+				slog.Error("failed to save reset index", "error", err)
+			}
+
+			// Send completion message
+			select {
+			case request.Responses <- CompletionResponse{Content: "Index reset completed. New state: " + r.Index.StatusText() + "\n", Done: true}:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
+
 	if r.Model == nil {
 		return errors.New("model not loaded")
 	}
@@ -33,12 +84,11 @@ func (r *Runner) TextGenerationPipeline(request Request) error {
 		mlx.DisableCompile()
 	}
 	mlx.ResetPeakMemory()
-	ctx := request.Ctx
+	ctx = request.Ctx
 	var (
 		sample, logprobs         *mlx.Array
 		nextSample, nextLogprobs *mlx.Array
 	)
-
 	defer func() {
 		if request.Sampler != nil {
 			request.Sampler.Free()
@@ -53,7 +103,24 @@ func (r *Runner) TextGenerationPipeline(request Request) error {
 			r.cache.dumpTree()
 		}
 		slog.Info("peak memory", "size", mlx.PrettyBytes(mlx.PeakMemory()))
+
+		// PERSIST LEARNED SHORTCUTS ON TERMINATION
+		if r.Index != nil {
+			indexDir := "/Users/vyacheslavtykhonov/projects/dev/ollama/index"
+			indexPath := filepath.Join(indexDir, r.Index.ModelPath+".index")
+			if err := r.Index.Save(indexPath); err != nil {
+				slog.Error("failed to auto-save learned index", "path", indexPath, "error", err)
+			} else {
+				slog.Info("auto-saved learned index", "path", indexPath, "shortcuts", len(r.Index.ShortcutCache))
+			}
+		}
 	}()
+
+	if r.Index != nil {
+		slog.Info("Starting pipeline with WeightIndex", "method", r.Index.Method, "shortcuts", len(r.Index.ShortcutCache))
+	} else {
+		slog.Warn("Starting pipeline WITHOUT WeightIndex")
+	}
 
 	inputs := r.Tokenizer.Encode(request.Prompt, r.Tokenizer.AddBOS())
 	if len(inputs) == 0 {
@@ -144,13 +211,62 @@ func (r *Runner) TextGenerationPipeline(request Request) error {
 		mlx.ClearCache()
 	}
 
+	window := make([]uint64, 4) // 4-token semantic window
+	// Seed window from the last 4 tokens of the prompt
+	for i := 0; i < 4; i++ {
+		idx := len(inputs) - 4 + i
+		if idx >= 0 {
+			window[i] = uint64(inputs[idx])
+		}
+	}
+
+	stepCount := 0
 	step := func(token *mlx.Array) (*mlx.Array, *mlx.Array) {
+		// --- DIAGNOSTIC HEARTBEAT ---
+		stepCount++
+		isSingle := token.Size() == 1
+		idxMethod := "nil"
+		if r.Index != nil { idxMethod = r.Index.Method }
+		
+		if stepCount <= 5 {
+			slog.Info("Step diagnostic", "step", stepCount, "size", token.Size(), "method", idxMethod, "shortcuts", len(r.Index.ShortcutCache))
+		}
+
+		// --- BYPASS LOGIC START ---
+		idxActive := r.Index != nil && strings.TrimSpace(r.Index.Method) == "bit-signature"
+		
+		if idxActive && isSingle {
+			val := uint64(token.Int())
+			// Shift window and add new token
+			copy(window, window[1:])
+			window[3] = val
+			
+			if predictedToken, sim, ok := r.Index.Predict(window); ok && sim > 0.99 {
+				slog.Info("SEMANTIC BYPASS TRIGGERED", "token", predictedToken, "window", window)
+				sample := mlx.FromValue(int(predictedToken))
+				logprobs := mlx.FromValues([]float32{0.0}, 1) 
+				mlx.Pin(sample, logprobs)
+				return sample, logprobs
+			}
+		}
+
 		fwd := r.Model.Forward(token.ExpandDims(0), caches)
 		logits := r.Model.Unembed(fwd)
 		logits = logits.Slice(mlx.Slice(), mlx.Slice(logits.Dim(1)-1), mlx.Slice()).Squeeze(1)
 
 		logprobs := logits.Subtract(logits.Logsumexp(true))
 		sample := request.Sampler.Sample(logprobs)
+
+		// --- LEARN LOGIC START ---
+		if r.Index != nil && r.Index.Method == "bit-signature" && token.Size() == 1 {
+			r.Index.Learn(window, int32(sample.Int()))
+			// Force visibility for the first few learned items
+			sz := len(r.Index.ShortcutCache)
+			if sz < 10 || sz%10 == 0 {
+				slog.Info("shortcut cache status", "learned", sz)
+			}
+		}
+		// --- LEARN LOGIC END ---
 
 		mlx.Pin(sample, logprobs)
 		mlx.Sweep()

@@ -515,11 +515,13 @@ type LoadRequest struct {
 	GPULayers        ml.GPULayersList
 	MultiUserCache   bool
 	SpeculativeModel string
+	UseMmap          bool
+	UseMlock         bool
+	OffloadKqv       bool
 
 	// Legacy fields - not used with the Ollama engine
 	ProjectorPath string
 	MainGPU       int
-	UseMmap       bool
 }
 
 type LoadResponse struct {

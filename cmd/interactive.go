@@ -36,6 +36,7 @@ func generateInteractive(cmd *cobra.Command, opts runOptions) error {
 		fmt.Fprintln(os.Stderr, "Available Commands:")
 		fmt.Fprintln(os.Stderr, "  /set            Set session variables")
 		fmt.Fprintln(os.Stderr, "  /show           Show model information")
+		fmt.Fprintln(os.Stderr, "  /index          Manage semantic index")
 		fmt.Fprintln(os.Stderr, "  /load <model>   Load a session or model")
 		fmt.Fprintln(os.Stderr, "  /save <model>   Save your current session")
 		fmt.Fprintln(os.Stderr, "  /clear          Clear session context")
@@ -67,6 +68,7 @@ func generateInteractive(cmd *cobra.Command, opts runOptions) error {
 		fmt.Fprintln(os.Stderr, "  /set quiet             Disable LLM stats")
 		fmt.Fprintln(os.Stderr, "  /set think             Enable thinking")
 		fmt.Fprintln(os.Stderr, "  /set nothink           Disable thinking")
+		fmt.Fprintln(os.Stderr, "  /set optimization <strategy>  Set performance strategy (speed, memory, semantic)")
 		fmt.Fprintln(os.Stderr, "")
 	}
 
@@ -84,6 +86,13 @@ func generateInteractive(cmd *cobra.Command, opts runOptions) error {
 		fmt.Fprintln(os.Stderr, "  Ctrl + g            Open default editor to compose a prompt")
 		fmt.Fprintln(os.Stderr, "  Ctrl + c            Stop the model from responding")
 		fmt.Fprintln(os.Stderr, "  Ctrl + d            Exit ollama (/bye)")
+		fmt.Fprintln(os.Stderr, "")
+	}
+
+	usageIndex := func() {
+		fmt.Fprintln(os.Stderr, "Available Commands:")
+		fmt.Fprintln(os.Stderr, "  /index rebuild    Recreate index from scratch")
+		fmt.Fprintln(os.Stderr, "  /index status     Show status of the index")
 		fmt.Fprintln(os.Stderr, "")
 	}
 
@@ -276,6 +285,25 @@ func generateInteractive(cmd *cobra.Command, opts runOptions) error {
 			}
 			fmt.Printf("Created new model '%s'\n", args[1])
 			continue
+		case strings.HasPrefix(line, "/index"):
+			args := strings.Fields(line)
+			if len(args) > 1 {
+				switch args[1] {
+				case "rebuild", "status":
+					fmt.Printf("Index %s requested...\n", args[1])
+					oldPrompt := opts.Prompt
+					opts.IndexCommand = args[1]
+					opts.Prompt = ""
+					generate(cmd, opts)
+					opts.IndexCommand = ""
+					opts.Prompt = oldPrompt
+				default:
+					usageIndex()
+				}
+			} else {
+				usageIndex()
+			}
+			continue
 		case strings.HasPrefix(line, "/clear"):
 			opts.Messages = []api.Message{}
 			if opts.System != "" {
@@ -337,6 +365,14 @@ func generateInteractive(cmd *cobra.Command, opts runOptions) error {
 						ensureThinkingSupport(cmd.Context(), client, opts.Model)
 					}
 					fmt.Println("Set 'nothink' mode.")
+				case "optimization":
+					if len(args) < 3 {
+						fmt.Println("Usage: /set optimization <speed|memory|semantic|off>")
+						continue
+					}
+					strategy := args[2]
+					opts.Options["optimization"] = strategy
+					fmt.Printf("Set optimization strategy to '%s'.\n", strategy)
 				case "format":
 					if len(args) < 3 || args[2] != "json" {
 						fmt.Println("Invalid or missing format. For 'json' mode use '/set format json'")

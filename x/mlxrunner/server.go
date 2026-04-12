@@ -29,9 +29,9 @@ func Execute(args []string) error {
 
 	if mlx.GPUIsAvailable() {
 		mlx.SetDefaultDeviceGPU()
-		slog.Info("MLX engine initialized", "MLX version", mlx.Version(), "device", "gpu")
+		slog.Info("MLX engine initialized", "MLX version", mlx.Version(), "device", "gpu", "method", os.Getenv("OLLAMA_INDEX_METHOD"))
 	} else {
-		slog.Info("MLX engine initialized", "MLX version", mlx.Version(), "device", "cpu")
+		slog.Info("MLX engine initialized", "MLX version", mlx.Version(), "device", "cpu", "method", os.Getenv("OLLAMA_INDEX_METHOD"))
 	}
 
 	var (

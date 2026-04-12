@@ -6,11 +6,14 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ollama/ollama/api"
+	"github.com/ollama/ollama/llm"
 	"github.com/ollama/ollama/x/mlxrunner/mlx"
 	"github.com/ollama/ollama/x/mlxrunner/model"
 	"github.com/ollama/ollama/x/mlxrunner/model/base"
@@ -28,20 +31,24 @@ type Request struct {
 	Sampler *sample.Sampler
 }
 
-type TextCompletionsRequest struct {
-	Prompt  string `json:"prompt"`
-	Options struct {
-		Temperature     float32 `json:"temperature"`
-		TopP            float32 `json:"top_p"`
-		MinP            float32 `json:"min_p"`
-		TopK            int     `json:"top_k"`
-		RepeatLastN     int     `json:"repeat_last_n"`
-		PresencePenalty float32 `json:"presence_penalty"`
-		MaxTokens       int     `json:"max_tokens"`
+type Options struct {
+	Temperature     float32 `json:"temperature"`
+	TopP            float32 `json:"top_p"`
+	MinP            float32 `json:"min_p"`
+	TopK            int     `json:"top_k"`
+	RepeatLastN     int     `json:"repeat_last_n"`
+	PresencePenalty float32 `json:"presence_penalty"`
+	MaxTokens       int     `json:"max_tokens"`
+	Optimization    string  `json:"optimization"`
+	IndexCommand    string  `json:"index_command"`
 
-		// Deprecated: use MaxTokens instead
-		NumPredict int `json:"num_predict"`
-	} `json:"options"`
+	// Deprecated: use MaxTokens instead
+	NumPredict int `json:"num_predict"`
+}
+
+type TextCompletionsRequest struct {
+	Prompt  string  `json:"prompt"`
+	Options Options `json:"options"`
 }
 
 type Runner struct {
@@ -50,6 +57,7 @@ type Runner struct {
 	Requests      chan Request
 	cache         kvCache
 	contextLength int
+	Index         *llm.WeightIndex
 }
 
 func (r *Runner) Load(modelName string) error {
@@ -79,6 +87,67 @@ func (r *Runner) Load(modelName string) error {
 	r.Model = m
 	r.Tokenizer = m.Tokenizer()
 	r.contextLength = m.MaxContextLength()
+
+	// Handle semantic index persistence using the blob digest for shared caching
+	indexDir := "/Users/vyacheslavtykhonov/projects/dev/ollama/index"
+	var identifier string
+	layers := root.Manifest.GetTensorLayers("")
+	if len(layers) > 0 {
+		identifier = layers[0].Digest
+	} else {
+		identifier = modelName
+	}
+	
+	indexPath := filepath.Join(indexDir, identifier+".index")
+	absPath, _ := filepath.Abs(indexPath)
+	
+	// Create index directory explicitly
+	if err := os.MkdirAll(indexDir, 0755); err != nil {
+		slog.Error("Could not create index directory", "dir", indexDir, "error", err)
+	}
+
+	idx, err := llm.LoadWeightIndex(indexPath)
+	if err == nil {
+		r.Index = idx
+		slog.Info("Loaded persistent semantic index", "identifier", identifier, "path", absPath)
+	} else {
+		method := os.Getenv("OLLAMA_INDEX_METHOD")
+		if method == "" {
+			method = "statistical"
+		}
+		
+		r.Index = &llm.WeightIndex{
+			ModelPath:     identifier,
+			Architecture:  "llama",
+			VectorMap:     make(map[string][]float32),
+			BitMap:        make(map[string][]uint64),
+			ShortcutCache: make(map[uint64]int32),
+			Metadata:      make(map[string]any),
+			Method:        method,
+		}
+		// Index tensors by name
+		for name := range tensors {
+			if strings.Contains(name, "embd") || strings.Contains(name, "weight") {
+				if method == "bit-signature" {
+					// Use identity-hash for weight pointers during initial bootstrap
+					r.Index.BitMap[name] = make([]uint64, 8)
+				} else {
+					r.Index.VectorMap[name] = []float32{1.0, 0.0, 1.0}
+				}
+			}
+		}
+		// PERSIST LEARNED SHORTCUTS ON TERMINATION
+		if r.Index != nil {
+			indexDir := "/Users/vyacheslavtykhonov/projects/dev/ollama/index"
+			indexPath := filepath.Join(indexDir, r.Index.ModelPath+".index")
+			if err := r.Index.Save(indexPath); err != nil {
+				slog.Error("failed to auto-save learned index", "path", indexPath, "error", err)
+			} else {
+				slog.Info("auto-saved learned index", "path", indexPath, "shortcuts", len(r.Index.ShortcutCache))
+			}
+		}
+	}
+
 	return nil
 }
 

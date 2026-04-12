@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"runtime"
@@ -113,6 +114,10 @@ type Sequence struct {
 	samplingDuration         time.Duration
 	numPredicted             int
 	numPromptInputs          int
+
+	window         []uint64
+	replayBuffer   []int32
+	isNitroSyncing bool // Concurrency lock for GPU catch-up
 }
 
 type NewSequenceParams struct {
@@ -207,6 +212,8 @@ func (s *Server) NewSequence(prompt string, images []llm.ImageData, params NewSe
 		shift:            params.shift,
 		logprobs:         params.logprobs,
 		topLogprobs:      params.topLogprobs,
+		window:           make([]uint64, 8),
+		replayBuffer:     make([]int32, 0),
 	}, nil
 }
 
@@ -385,6 +392,8 @@ type Server struct {
 	// multimodalHash generates hashes for comparing equality
 	// of non-text data
 	multimodalHash maphash.Hash
+
+	Index *llm.WeightIndex // Nitro Index
 }
 
 func (s *Server) allNil() bool {
@@ -521,6 +530,103 @@ func (s *Server) forwardBatch(pendingBatch batchState) (nextBatch batchState, er
 		}
 
 		batchSize := s.batchSize
+
+		// Load the initial 8-gram window from the combined prompt (cached + current)
+		if len(seq.window) == 8 && seq.window[7] == 0 {
+			var allTokens []int32
+			for _, inp := range seq.cache.Inputs {
+				allTokens = append(allTokens, inp.Token)
+			}
+			for _, inp := range seq.inputs {
+				allTokens = append(allTokens, inp.Token)
+			}
+			if len(allTokens) > 0 {
+				end := len(allTokens)
+				startOffset := end - 8
+				if startOffset < 0 { startOffset = 0 }
+				idx := 8 - (end - startOffset)
+				for i := startOffset; i < end; i++ {
+					seq.window[idx] = uint64(allTokens[i])
+					idx++
+				}
+			}
+		}
+
+		// --- HYPER-BYPASS (Nitro-8 Stable + Lock) ---
+		isBypassing := false
+		bypassCount := 0
+		maxNitroBypass := 512
+		var lastToken int32 = -1
+		
+		// LOCK: Only Nitro if we aren't currently syncing the GPU cache from a previous burst
+		burstGuard := make(map[uint64]bool)
+	NitroLoop:
+		for s.Index != nil && s.Index.Method == "bit-signature" && !seq.isNitroSyncing {
+			if len(seq.inputs) != 1 || seq.inputs[0].Token == 0 {
+				break
+			}
+			if bypassCount >= maxNitroBypass {
+				break
+			}
+
+			predToken, sim, ok := s.Index.Predict(seq.window)
+			currentContext := llm.BuildSigKey(seq.window)
+			if !ok || sim < 0.9 || burstGuard[currentContext] { 
+				break
+			}
+			burstGuard[currentContext] = true
+			if predToken == lastToken {
+				break
+			}
+
+			piece, err := s.model.(tokenizer.Tokenizer).Decode([]int32{predToken})
+			if err != nil {
+				break
+			}
+
+			select {
+			case seq.responses <- response{content: piece}:
+			default:
+				// Channel full, break Nitro loop to let GPU handle it (throttling)
+				slog.Debug("Nitro Backpressure", "seq", seqIdx)
+				break NitroLoop 
+			}
+
+			isBypassing = true
+			bypassCount++
+			lastToken = predToken
+			
+			seq.numPredicted++
+			seq.lastUpdatedAt = time.Now()
+			
+			copy(seq.window, seq.window[1:])
+			seq.window[len(seq.window)-1] = uint64(predToken)
+			seq.replayBuffer = append(seq.replayBuffer, predToken)
+			
+			seq.inputs[0].Token = predToken
+			
+			if s.model.(tokenizer.Tokenizer).Is(predToken, tokenizer.SpecialEOS) {
+				s.removeSequence(seqIdx, llm.DoneReasonStop)
+				break
+			}
+		}
+
+		if isBypassing && s.seqs[seqIdx] != nil && len(seq.replayBuffer) > 0 {
+			toSync := make([]*input.Input, len(seq.replayBuffer))
+			for i, t := range seq.replayBuffer {
+				toSync[i] = &input.Input{Token: t}
+			}
+			seq.inputs = toSync
+			seq.isNitroSyncing = true
+			seq.replayBuffer = nil
+			slog.Debug("Nitro Sync: Fast-forwarding GPU", "tokens", len(toSync))
+			slog.Info("NITRO BYPASS TRIGGERED", "tokens", len(toSync))
+		}
+
+		if s.seqs[seqIdx] == nil {
+		    continue
+		}
+		// --- HYPER-BYPASS END ---
 
 		for i, inp := range seq.inputs {
 			// If we are required to put following inputs into a single batch then extend the
@@ -730,7 +836,19 @@ func (s *Server) computeBatch(activeBatch batchState) {
 
 	logutil.Trace("computeBatch: decoding", "batchID", activeBatch.id)
 	for i, seq := range s.seqs {
-		if seq == nil || nextBatchTokens[i] == nil {
+		if seq == nil {
+			continue
+		}
+		// If a catch-up batch finished, release the Nitro lock
+		// Only release the Nitro Lock once the GPU has fully synced (empty inputs)
+		if activeBatch.seqs[i] == seq && nextBatchTokens[i] == nil {
+			if seq.isNitroSyncing && len(seq.inputs) == 0 {
+				seq.isNitroSyncing = false
+				slog.Debug("Nitro Sync (MLX) Complete", "seqIdx", i)
+			}
+			continue
+		}
+		if nextBatchTokens[i] == nil {
 			continue
 		}
 		// If the sequence was replaced while this batch was computing, discard results.
@@ -763,6 +881,14 @@ func (s *Server) computeBatch(activeBatch batchState) {
 		}
 
 		nextBatchTokens[i].Token = token
+
+		// --- NITRO LEARNING ---
+		if s.Index != nil {
+			s.Index.Learn(seq.window, int32(token))
+		}
+		copy(seq.window, seq.window[1:])
+		seq.window[len(seq.window)-1] = uint64(token)
+		// ----------------------
 
 		// if it's an end of sequence token, break
 		if s.model.(tokenizer.Tokenizer).Is(token, tokenizer.SpecialEOS) {
@@ -1422,6 +1548,27 @@ func Execute(args []string) error {
 	server := &Server{
 		modelPath: *mpath,
 		status:    llm.ServerStatusLaunched,
+	}
+
+	// LOAD SEMANTIC INDEX
+	method := os.Getenv("OLLAMA_INDEX_METHOD")
+	indexDir := "/Users/vyacheslavtykhonov/projects/dev/ollama/index"
+	if method != "" {
+		slog.Info("Attempting to load index", "dir", indexDir, "model", *mpath)
+		indexPath := filepath.Join(indexDir, filepath.Base(*mpath)+".index")
+		if idx, err := llm.LoadWeightIndex(indexPath); err == nil {
+			server.Index = idx
+			slog.Info("Found existing semantic index", "path", indexPath, "method", idx.Method, "shortcuts", len(idx.ShortcutCache))
+		} else {
+			server.Index = &llm.WeightIndex{
+				ModelPath:     filepath.Base(*mpath),
+				Method:        method,
+				ShortcutCache: make(map[uint64]int32),
+				Metadata:      make(map[string]any),
+			}
+		}
+	} else {
+	    slog.Warn("OLLAMA_INDEX_METHOD not set, bypassing disabled")
 	}
 
 	server.cond = sync.NewCond(&server.mu)
