@@ -26,7 +26,8 @@ echo "--- 🧠 PHASE 1: SEQUENTIAL LEARNING ---"
 curl -s -X POST http://127.0.0.1:11435/api/generate -d "{
   \"model\": \"gemma4\",
   \"prompt\": \"$PROMPT\",
-  \"stream\": false
+  \"stream\": false,
+  \"options\": { \"temperature\": 0 }
 }" > /dev/null
 
 echo "--- 💾 Waiting for auto-save (3s)..."
@@ -44,7 +45,8 @@ do
         RESPONSE=$(curl -s -X POST http://127.0.0.1:11435/api/generate -d "{
           \"model\": \"gemma4\",
           \"prompt\": \"$PROMPT\",
-          \"stream\": false
+          \"stream\": false,
+          \"options\": { \"temperature\": 0 }
         }")
         REQ_END=$(date +%s)
         REQ_ELAPSED=$((REQ_END - REQ_START))

@@ -1,0 +1,239 @@
+time=2026-04-11T14:45:15.508+02:00 level=INFO source=routes.go:1752 msg="server config" env="map[HTTPS_PROXY: HTTP_PROXY: NO_PROXY: OLLAMA_CONTEXT_LENGTH:0 OLLAMA_DEBUG:DEBUG OLLAMA_DEBUG_LOG_REQUESTS:false OLLAMA_EDITOR: OLLAMA_FLASH_ATTENTION:false OLLAMA_GPU_OVERHEAD:0 OLLAMA_HOST:http://127.0.0.1:11435 OLLAMA_KEEP_ALIVE:5m0s OLLAMA_KV_CACHE_TYPE: OLLAMA_LLM_LIBRARY: OLLAMA_LOAD_TIMEOUT:5m0s OLLAMA_MAX_LOADED_MODELS:0 OLLAMA_MAX_QUEUE:512 OLLAMA_MODELS:/Users/vyacheslavtykhonov/.ollama/models OLLAMA_MULTIUSER_CACHE:false OLLAMA_NEW_ENGINE:false OLLAMA_NOHISTORY:false OLLAMA_NOPRUNE:false OLLAMA_NO_CLOUD:false OLLAMA_NUM_PARALLEL:1 OLLAMA_ORIGINS:[http://localhost https://localhost http://localhost:* https://localhost:* http://127.0.0.1 https://127.0.0.1 http://127.0.0.1:* https://127.0.0.1:* http://0.0.0.0 https://0.0.0.0 http://0.0.0.0:* https://0.0.0.0:* app://* file://* tauri://* vscode-webview://* vscode-file://*] OLLAMA_REMOTES:[ollama.com] OLLAMA_SCHED_SPREAD:false http_proxy: https_proxy: no_proxy:]"
+time=2026-04-11T14:45:15.508+02:00 level=INFO source=routes.go:1754 msg="Ollama cloud disabled: false"
+time=2026-04-11T14:45:15.513+02:00 level=INFO source=images.go:499 msg="total blobs: 52"
+time=2026-04-11T14:45:15.514+02:00 level=INFO source=images.go:506 msg="total unused blobs removed: 0"
+[GIN-debug] [WARNING] Creating an Engine instance with the Logger and Recovery middleware already attached.
+
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] HEAD   /                         --> github.com/ollama/ollama/server.(*Server).GenerateRoutes.func1 (5 handlers)
+[GIN-debug] GET    /                         --> github.com/ollama/ollama/server.(*Server).GenerateRoutes.func2 (5 handlers)
+[GIN-debug] HEAD   /api/version              --> github.com/ollama/ollama/server.(*Server).GenerateRoutes.func3 (5 handlers)
+[GIN-debug] GET    /api/version              --> github.com/ollama/ollama/server.(*Server).GenerateRoutes.func4 (5 handlers)
+[GIN-debug] GET    /api/status               --> github.com/ollama/ollama/server.(*Server).StatusHandler-fm (5 handlers)
+[GIN-debug] POST   /api/pull                 --> github.com/ollama/ollama/server.(*Server).PullHandler-fm (5 handlers)
+[GIN-debug] POST   /api/push                 --> github.com/ollama/ollama/server.(*Server).PushHandler-fm (5 handlers)
+[GIN-debug] HEAD   /api/tags                 --> github.com/ollama/ollama/server.(*Server).ListHandler-fm (5 handlers)
+[GIN-debug] GET    /api/tags                 --> github.com/ollama/ollama/server.(*Server).ListHandler-fm (5 handlers)
+[GIN-debug] POST   /api/show                 --> github.com/ollama/ollama/server.(*Server).ShowHandler-fm (5 handlers)
+[GIN-debug] DELETE /api/delete               --> github.com/ollama/ollama/server.(*Server).DeleteHandler-fm (5 handlers)
+[GIN-debug] POST   /api/me                   --> github.com/ollama/ollama/server.(*Server).WhoamiHandler-fm (5 handlers)
+[GIN-debug] POST   /api/signout              --> github.com/ollama/ollama/server.(*Server).SignoutHandler-fm (5 handlers)
+[GIN-debug] DELETE /api/user/keys/:encodedKey --> github.com/ollama/ollama/server.(*Server).SignoutHandler-fm (5 handlers)
+[GIN-debug] POST   /api/create               --> github.com/ollama/ollama/server.(*Server).CreateHandler-fm (5 handlers)
+[GIN-debug] POST   /api/blobs/:digest        --> github.com/ollama/ollama/server.(*Server).CreateBlobHandler-fm (5 handlers)
+[GIN-debug] HEAD   /api/blobs/:digest        --> github.com/ollama/ollama/server.(*Server).HeadBlobHandler-fm (5 handlers)
+[GIN-debug] POST   /api/copy                 --> github.com/ollama/ollama/server.(*Server).CopyHandler-fm (5 handlers)
+[GIN-debug] POST   /api/experimental/web_search --> github.com/ollama/ollama/server.(*Server).WebSearchExperimentalHandler-fm (5 handlers)
+[GIN-debug] POST   /api/experimental/web_fetch --> github.com/ollama/ollama/server.(*Server).WebFetchExperimentalHandler-fm (5 handlers)
+[GIN-debug] GET    /api/ps                   --> github.com/ollama/ollama/server.(*Server).PsHandler-fm (5 handlers)
+[GIN-debug] POST   /api/generate             --> github.com/ollama/ollama/server.(*Server).GenerateHandler-fm (5 handlers)
+[GIN-debug] POST   /api/chat                 --> github.com/ollama/ollama/server.(*Server).ChatHandler-fm (5 handlers)
+[GIN-debug] POST   /api/embed                --> github.com/ollama/ollama/server.(*Server).EmbedHandler-fm (5 handlers)
+[GIN-debug] POST   /api/embeddings           --> github.com/ollama/ollama/server.(*Server).EmbeddingsHandler-fm (5 handlers)
+[GIN-debug] POST   /v1/chat/completions      --> github.com/ollama/ollama/server.(*Server).ChatHandler-fm (7 handlers)
+[GIN-debug] POST   /v1/completions           --> github.com/ollama/ollama/server.(*Server).GenerateHandler-fm (7 handlers)
+[GIN-debug] POST   /v1/embeddings            --> github.com/ollama/ollama/server.(*Server).EmbedHandler-fm (7 handlers)
+[GIN-debug] GET    /v1/models                --> github.com/ollama/ollama/server.(*Server).ListHandler-fm (6 handlers)
+[GIN-debug] GET    /v1/models/:model         --> github.com/ollama/ollama/server.(*Server).ShowHandler-fm (7 handlers)
+[GIN-debug] POST   /v1/responses             --> github.com/ollama/ollama/server.(*Server).ChatHandler-fm (7 handlers)
+[GIN-debug] POST   /v1/images/generations    --> github.com/ollama/ollama/server.(*Server).GenerateHandler-fm (7 handlers)
+[GIN-debug] POST   /v1/images/edits          --> github.com/ollama/ollama/server.(*Server).GenerateHandler-fm (7 handlers)
+[GIN-debug] POST   /v1/audio/transcriptions  --> github.com/ollama/ollama/server.(*Server).ChatHandler-fm (6 handlers)
+[GIN-debug] POST   /v1/messages              --> github.com/ollama/ollama/server.(*Server).ChatHandler-fm (7 handlers)
+time=2026-04-11T14:45:15.515+02:00 level=INFO source=routes.go:1810 msg="Listening on 127.0.0.1:11435 (version 0.0.0)"
+time=2026-04-11T14:45:15.515+02:00 level=DEBUG source=sched.go:145 msg="starting llm scheduler"
+time=2026-04-11T14:45:15.517+02:00 level=INFO source=runner.go:67 msg="discovering available GPUs..."
+time=2026-04-11T14:45:15.519+02:00 level=INFO source=server.go:465 msg="starting runner" cmd="/Users/vyacheslavtykhonov/projects/dev/ollama/ollama_indexed runner --ollama-engine --port 52741"
+time=2026-04-11T14:45:15.519+02:00 level=DEBUG source=server.go:466 msg=subprocess PATH=/usr/bin:/bin:/usr/sbin:/sbin OLLAMA_INDEX_METHOD=bit-signature OLLAMA_DEBUG=1 OLLAMA_HOST=127.0.0.1:11435 DYLD_LIBRARY_PATH=/Users/vyacheslavtykhonov/projects/dev/ollama OLLAMA_LIBRARY_PATH=/Users/vyacheslavtykhonov/projects/dev/ollama
+time=2026-04-11T14:45:15.614+02:00 level=DEBUG source=runner.go:437 msg="bootstrap discovery took" duration=96.829084ms OLLAMA_LIBRARY_PATH=[/Users/vyacheslavtykhonov/projects/dev/ollama] extra_envs=map[]
+time=2026-04-11T14:45:15.614+02:00 level=DEBUG source=runner.go:124 msg="evaluating which, if any, devices to filter out" initial_count=1
+time=2026-04-11T14:45:15.614+02:00 level=DEBUG source=runner.go:193 msg="adjusting filtering IDs" FilterID=0 new_ID=0
+time=2026-04-11T14:45:15.614+02:00 level=DEBUG source=runner.go:40 msg="GPU bootstrap discovery took" duration=98.891042ms
+time=2026-04-11T14:45:15.614+02:00 level=INFO source=types.go:42 msg="inference compute" id=0 filter_id=0 library=Metal compute=0.0 name=Metal description="Apple M1 Max" libdirs="" driver=0.0 pci_id="" type=discrete total="25.0 GiB" available="25.0 GiB"
+time=2026-04-11T14:45:15.614+02:00 level=INFO source=routes.go:1860 msg="vram-based default context" total_vram="25.0 GiB" default_num_ctx=32768
+time=2026-04-11T14:45:30.664+02:00 level=DEBUG source=runner.go:40 msg="overall device VRAM discovery took" duration=709ns
+time=2026-04-11T14:45:30.664+02:00 level=DEBUG source=sched.go:220 msg="updating default concurrency" OLLAMA_MAX_LOADED_MODELS=3 gpu_count=1
+time=2026-04-11T14:45:30.664+02:00 level=DEBUG source=sched.go:229 msg="loading first model" model=/Users/vyacheslavtykhonov/.ollama/models/blobs/sha256-e7b273f9636059a689e3ddcab3716e4f65abe0143ac978e46673ad0e52d09efb
+time=2026-04-11T14:45:30.726+02:00 level=DEBUG source=ggml.go:325 msg="key with type not found" key=general.alignment default=32
+time=2026-04-11T14:45:30.760+02:00 level=DEBUG source=ggml.go:325 msg="key with type not found" key=general.alignment default=32
+time=2026-04-11T14:45:30.760+02:00 level=DEBUG source=ggml.go:325 msg="key with type not found" key=gptoss.pooling_type default=0
+time=2026-04-11T14:45:30.760+02:00 level=INFO source=server.go:272 msg="enabling flash attention"
+time=2026-04-11T14:45:30.762+02:00 level=INFO source=server.go:465 msg="starting runner" cmd="/Users/vyacheslavtykhonov/projects/dev/ollama/ollama_indexed runner --ollama-engine --model /Users/vyacheslavtykhonov/.ollama/models/blobs/sha256-e7b273f9636059a689e3ddcab3716e4f65abe0143ac978e46673ad0e52d09efb --port 52778"
+time=2026-04-11T14:45:30.763+02:00 level=DEBUG source=server.go:466 msg=subprocess PATH=/usr/bin:/bin:/usr/sbin:/sbin OLLAMA_INDEX_METHOD=bit-signature OLLAMA_DEBUG=1 OLLAMA_HOST=127.0.0.1:11435 DYLD_LIBRARY_PATH=/Users/vyacheslavtykhonov/projects/dev/ollama OLLAMA_LIBRARY_PATH=/Users/vyacheslavtykhonov/projects/dev/ollama
+time=2026-04-11T14:45:30.766+02:00 level=INFO source=index.go:362 msg="weight index loaded successfully" path=index/sha256-e7b273f9636059a689e3ddcab3716e4f65abe0143ac978e46673ad0e52d09efb.index
+time=2026-04-11T14:45:30.766+02:00 level=INFO source=index.go:60 msg="Found existing semantic index on disk" model=sha256-e7b273f9636059a689e3ddcab3716e4f65abe0143ac978e46673ad0e52d09efb method=bit-signature
+time=2026-04-11T14:45:30.766+02:00 level=INFO source=sched.go:495 msg="system memory" total="32.0 GiB" free="17.4 GiB" free_swap="0 B"
+time=2026-04-11T14:45:30.766+02:00 level=INFO source=sched.go:502 msg="gpu memory" id=0 library=Metal available="24.5 GiB" free="25.0 GiB" minimum="512.0 MiB" overhead="0 B"
+time=2026-04-11T14:45:30.766+02:00 level=INFO source=server.go:795 msg="loading model" "model layers"=25 requested=-1
+time=2026-04-11T14:45:30.779+02:00 level=INFO source=runner.go:1543 msg="starting ollama engine"
+time=2026-04-11T14:45:30.779+02:00 level=INFO source=runner.go:1557 msg="Attempting to load index" dir=/Users/vyacheslavtykhonov/projects/dev/ollama/index model=/Users/vyacheslavtykhonov/.ollama/models/blobs/sha256-e7b273f9636059a689e3ddcab3716e4f65abe0143ac978e46673ad0e52d09efb
+time=2026-04-11T14:45:30.779+02:00 level=INFO source=index.go:362 msg="weight index loaded successfully" path=/Users/vyacheslavtykhonov/projects/dev/ollama/index/sha256-e7b273f9636059a689e3ddcab3716e4f65abe0143ac978e46673ad0e52d09efb.index
+time=2026-04-11T14:45:30.779+02:00 level=INFO source=runner.go:1561 msg="Found existing semantic index" path=/Users/vyacheslavtykhonov/projects/dev/ollama/index/sha256-e7b273f9636059a689e3ddcab3716e4f65abe0143ac978e46673ad0e52d09efb.index method=bit-signature shortcuts=0
+time=2026-04-11T14:45:30.779+02:00 level=INFO source=runner.go:1599 msg="Server listening on 127.0.0.1:52778"
+time=2026-04-11T14:45:30.788+02:00 level=INFO source=runner.go:1416 msg=load request="{Operation:fit LoraPath:[] Parallel:1 BatchSize:512 FlashAttention:Enabled KvSize:32768 KvCacheType: NumThreads:8 GPULayers:25[ID:0 Layers:25(0..24)] MultiUserCache:false SpeculativeModel: UseMmap:true UseMlock:false OffloadKqv:true ProjectorPath: MainGPU:0}"
+time=2026-04-11T14:45:30.825+02:00 level=DEBUG source=ggml.go:325 msg="key with type not found" key=general.alignment default=32
+time=2026-04-11T14:45:30.826+02:00 level=DEBUG source=ggml.go:325 msg="key with type not found" key=general.name default=""
+time=2026-04-11T14:45:30.826+02:00 level=DEBUG source=ggml.go:325 msg="key with type not found" key=general.description default=""
+time=2026-04-11T14:45:30.826+02:00 level=INFO source=ggml.go:136 msg="" architecture=gptoss file_type=MXFP4 name="" description="" num_tensors=459 num_key_values=32
+time=2026-04-11T14:45:30.826+02:00 level=DEBUG source=ggml.go:94 msg="ggml backend load all from path" path=/Users/vyacheslavtykhonov/projects/dev/ollama
+ggml_metal_device_init: tensor API disabled for pre-M5 and pre-A19 devices
+ggml_metal_library_init: using embedded metal library
+ggml_metal_library_init: loaded in 0.008 sec
+ggml_metal_rsets_init: creating a residency set collection (keep_alive = 180 s)
+ggml_metal_device_init: GPU name:   Apple M1 Max
+ggml_metal_device_init: GPU family: MTLGPUFamilyApple7  (1007)
+ggml_metal_device_init: GPU family: MTLGPUFamilyCommon3 (3003)
+ggml_metal_device_init: GPU family: MTLGPUFamilyMetal4  (5002)
+ggml_metal_device_init: simdgroup reduction   = true
+ggml_metal_device_init: simdgroup matrix mul. = true
+ggml_metal_device_init: has unified memory    = true
+ggml_metal_device_init: has bfloat            = true
+ggml_metal_device_init: has tensor            = false
+ggml_metal_device_init: use residency sets    = true
+ggml_metal_device_init: use shared buffers    = true
+ggml_metal_device_init: recommendedMaxWorkingSetSize  = 26800.60 MB
+time=2026-04-11T14:45:30.827+02:00 level=INFO source=ggml.go:104 msg=system Metal.0.EMBED_LIBRARY=1 CPU.0.NEON=1 CPU.0.ARM_FMA=1 CPU.0.FP16_VA=1 CPU.0.DOTPROD=1 CPU.0.LLAMAFILE=1 CPU.0.ACCELERATE=1 compiler=cgo(clang)
+ggml_metal_init: allocating
+ggml_metal_init: picking default device: Apple M1 Max
+ggml_metal_init: use fusion         = true
+ggml_metal_init: use concurrency    = true
+ggml_metal_init: use graph optimize = true
+time=2026-04-11T14:45:30.877+02:00 level=DEBUG source=ggml.go:325 msg="key with type not found" key=gptoss.pooling_type default=0
+time=2026-04-11T14:45:30.917+02:00 level=DEBUG source=ggml.go:852 msg="compute graph" nodes=1399 splits=2
+time=2026-04-11T14:45:30.917+02:00 level=DEBUG source=ggml.go:852 msg="compute graph" nodes=1399 splits=2
+time=2026-04-11T14:45:30.918+02:00 level=DEBUG source=device.go:240 msg="model weights" device=Metal size="11.8 GiB"
+time=2026-04-11T14:45:30.918+02:00 level=DEBUG source=device.go:245 msg="model weights" device=CPU size="1.1 GiB"
+time=2026-04-11T14:45:30.918+02:00 level=DEBUG source=device.go:251 msg="kv cache" device=Metal size="876.0 MiB"
+time=2026-04-11T14:45:30.918+02:00 level=DEBUG source=device.go:262 msg="compute graph" device=Metal size="153.6 MiB"
+time=2026-04-11T14:45:30.918+02:00 level=DEBUG source=device.go:267 msg="compute graph" device=CPU size="5.6 MiB"
+time=2026-04-11T14:45:30.918+02:00 level=DEBUG source=device.go:272 msg="total memory" size="13.8 GiB"
+time=2026-04-11T14:45:30.918+02:00 level=DEBUG source=server.go:820 msg=memory success=true required.InputWeights=1158266880 required.CPU.Graph=5898240 required.Metal.ID=0 required.Metal.Weights="[477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 1158278400]" required.Metal.Cache="[9437184 67108864 9437184 67108864 9437184 67108864 9437184 67108864 9437184 67108864 9437184 67108864 9437184 67108864 9437184 67108864 9437184 67108864 9437184 67108864 9437184 67108864 9437184 67108864 0]" required.Metal.Graph=161093664
+time=2026-04-11T14:45:30.918+02:00 level=DEBUG source=server.go:1014 msg="available gpu" id=0 library=Metal "available layer vram"="24.3 GiB" backoff=0.00 minimum="512.0 MiB" overhead="0 B" graph="153.6 MiB"
+time=2026-04-11T14:45:30.918+02:00 level=DEBUG source=server.go:831 msg="new layout created" layers="25[ID:0 Layers:25(0..24)]"
+time=2026-04-11T14:45:30.918+02:00 level=INFO source=runner.go:1416 msg=load request="{Operation:alloc LoraPath:[] Parallel:1 BatchSize:512 FlashAttention:Enabled KvSize:32768 KvCacheType: NumThreads:8 GPULayers:25[ID:0 Layers:25(0..24)] MultiUserCache:false SpeculativeModel: UseMmap:true UseMlock:false OffloadKqv:true ProjectorPath: MainGPU:0}"
+time=2026-04-11T14:45:30.952+02:00 level=DEBUG source=ggml.go:325 msg="key with type not found" key=general.alignment default=32
+time=2026-04-11T14:45:31.595+02:00 level=DEBUG source=ggml.go:325 msg="key with type not found" key=gptoss.pooling_type default=0
+time=2026-04-11T14:45:31.808+02:00 level=DEBUG source=ggml.go:852 msg="compute graph" nodes=1399 splits=2
+time=2026-04-11T14:45:31.812+02:00 level=DEBUG source=ggml.go:852 msg="compute graph" nodes=1399 splits=2
+time=2026-04-11T14:45:31.813+02:00 level=DEBUG source=device.go:240 msg="model weights" device=Metal size="11.8 GiB"
+time=2026-04-11T14:45:31.813+02:00 level=DEBUG source=device.go:245 msg="model weights" device=CPU size="1.1 GiB"
+time=2026-04-11T14:45:31.813+02:00 level=DEBUG source=device.go:251 msg="kv cache" device=Metal size="876.0 MiB"
+time=2026-04-11T14:45:31.813+02:00 level=DEBUG source=device.go:262 msg="compute graph" device=Metal size="153.6 MiB"
+time=2026-04-11T14:45:31.813+02:00 level=DEBUG source=device.go:267 msg="compute graph" device=CPU size="5.6 MiB"
+time=2026-04-11T14:45:31.813+02:00 level=DEBUG source=device.go:272 msg="total memory" size="13.8 GiB"
+time=2026-04-11T14:45:31.813+02:00 level=DEBUG source=server.go:820 msg=memory success=true required.InputWeights=1158266880 required.CPU.Graph=5898240 required.Metal.ID=0 required.Metal.Weights="[477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 477628544 1158278400]" required.Metal.Cache="[9437184 67108864 9437184 67108864 9437184 67108864 9437184 67108864 9437184 67108864 9437184 67108864 9437184 67108864 9437184 67108864 9437184 67108864 9437184 67108864 9437184 67108864 9437184 67108864 0]" required.Metal.Graph=161093664
+time=2026-04-11T14:45:31.813+02:00 level=DEBUG source=server.go:1014 msg="available gpu" id=0 library=Metal "available layer vram"="24.3 GiB" backoff=0.00 minimum="512.0 MiB" overhead="0 B" graph="153.6 MiB"
+time=2026-04-11T14:45:31.813+02:00 level=DEBUG source=server.go:831 msg="new layout created" layers="25[ID:0 Layers:25(0..24)]"
+time=2026-04-11T14:45:31.813+02:00 level=INFO source=runner.go:1416 msg=load request="{Operation:commit LoraPath:[] Parallel:1 BatchSize:512 FlashAttention:Enabled KvSize:32768 KvCacheType: NumThreads:8 GPULayers:25[ID:0 Layers:25(0..24)] MultiUserCache:false SpeculativeModel: UseMmap:true UseMlock:false OffloadKqv:true ProjectorPath: MainGPU:0}"
+time=2026-04-11T14:45:31.813+02:00 level=INFO source=ggml.go:482 msg="offloading 24 repeating layers to GPU"
+time=2026-04-11T14:45:31.813+02:00 level=INFO source=ggml.go:489 msg="offloading output layer to GPU"
+time=2026-04-11T14:45:31.813+02:00 level=INFO source=ggml.go:494 msg="offloaded 25/25 layers to GPU"
+time=2026-04-11T14:45:31.813+02:00 level=INFO source=device.go:240 msg="model weights" device=Metal size="11.8 GiB"
+time=2026-04-11T14:45:31.813+02:00 level=INFO source=device.go:245 msg="model weights" device=CPU size="1.1 GiB"
+time=2026-04-11T14:45:31.813+02:00 level=INFO source=device.go:251 msg="kv cache" device=Metal size="876.0 MiB"
+time=2026-04-11T14:45:31.813+02:00 level=INFO source=device.go:262 msg="compute graph" device=Metal size="153.6 MiB"
+time=2026-04-11T14:45:31.813+02:00 level=INFO source=device.go:267 msg="compute graph" device=CPU size="5.6 MiB"
+time=2026-04-11T14:45:31.813+02:00 level=INFO source=device.go:272 msg="total memory" size="13.8 GiB"
+time=2026-04-11T14:45:31.813+02:00 level=INFO source=sched.go:572 msg="loaded runners" count=1
+time=2026-04-11T14:45:31.813+02:00 level=INFO source=server.go:1388 msg="waiting for llama runner to start responding"
+time=2026-04-11T14:45:31.813+02:00 level=INFO source=server.go:1422 msg="waiting for server to become available" status="llm server loading model"
+time=2026-04-11T14:45:32.064+02:00 level=DEBUG source=server.go:1432 msg="model load progress 0.07"
+time=2026-04-11T14:45:32.316+02:00 level=DEBUG source=server.go:1432 msg="model load progress 0.14"
+time=2026-04-11T14:45:32.566+02:00 level=DEBUG source=server.go:1432 msg="model load progress 0.22"
+time=2026-04-11T14:45:32.817+02:00 level=DEBUG source=server.go:1432 msg="model load progress 0.29"
+time=2026-04-11T14:45:33.069+02:00 level=DEBUG source=server.go:1432 msg="model load progress 0.37"
+time=2026-04-11T14:45:33.319+02:00 level=DEBUG source=server.go:1432 msg="model load progress 0.45"
+time=2026-04-11T14:45:33.571+02:00 level=DEBUG source=server.go:1432 msg="model load progress 0.53"
+time=2026-04-11T14:45:33.822+02:00 level=DEBUG source=server.go:1432 msg="model load progress 0.60"
+time=2026-04-11T14:45:34.073+02:00 level=DEBUG source=server.go:1432 msg="model load progress 0.68"
+time=2026-04-11T14:45:34.324+02:00 level=DEBUG source=server.go:1432 msg="model load progress 0.76"
+time=2026-04-11T14:45:34.576+02:00 level=DEBUG source=server.go:1432 msg="model load progress 0.83"
+time=2026-04-11T14:45:34.827+02:00 level=DEBUG source=server.go:1432 msg="model load progress 0.87"
+time=2026-04-11T14:45:35.077+02:00 level=DEBUG source=server.go:1432 msg="model load progress 0.90"
+time=2026-04-11T14:45:35.329+02:00 level=DEBUG source=server.go:1432 msg="model load progress 0.94"
+time=2026-04-11T14:45:35.579+02:00 level=DEBUG source=server.go:1432 msg="model load progress 0.97"
+time=2026-04-11T14:45:35.841+02:00 level=DEBUG source=ggml.go:325 msg="key with type not found" key=gptoss.pooling_type default=0
+time=2026-04-11T14:45:35.845+02:00 level=INFO source=server.go:1426 msg="llama runner started in 5.08 seconds"
+time=2026-04-11T14:45:35.847+02:00 level=DEBUG source=sched.go:584 msg="finished setting up" runner.name=registry.ollama.ai/library/gpt-oss:20b runner.inference="[{ID:0 Library:Metal}]" runner.size="13.8 GiB" runner.vram="13.8 GiB" runner.parallel=1 runner.pid=70995 runner.model=/Users/vyacheslavtykhonov/.ollama/models/blobs/sha256-e7b273f9636059a689e3ddcab3716e4f65abe0143ac978e46673ad0e52d09efb runner.num_ctx=32768
+time=2026-04-11T14:45:35.907+02:00 level=DEBUG source=server.go:1574 msg="completion request" images=0 prompt=467 format=""
+time=2026-04-11T14:45:35.967+02:00 level=DEBUG source=cache.go:151 msg="loading cache slot" id=0 cache=0 prompt=97 used=0 remaining=97
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_rms_norm_mul_f32_4', name = 'kernel_rms_norm_mul_f32_4'
+ggml_metal_library_compile_pipeline: loaded kernel_rms_norm_mul_f32_4                     0x107323050 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_mul_mm_bf16_f32', name = 'kernel_mul_mm_bf16_f32_bci=0_bco=1'
+ggml_metal_library_compile_pipeline: loaded kernel_mul_mm_bf16_f32_bci=0_bco=1            0x107323c90 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_add_row_c4_fuse_1', name = 'kernel_add_row_c4_fuse_1'
+ggml_metal_library_compile_pipeline: loaded kernel_add_row_c4_fuse_1                      0x107324490 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_rope_neox_f32', name = 'kernel_rope_neox_f32_imrope=0'
+ggml_metal_library_compile_pipeline: loaded kernel_rope_neox_f32_imrope=0                 0x107325a90 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_set_rows_f16_i32', name = 'kernel_set_rows_f16_i32'
+ggml_metal_library_compile_pipeline: loaded kernel_set_rows_f16_i32                       0x107326290 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_cpy_f32_f16', name = 'kernel_cpy_f32_f16'
+ggml_metal_library_compile_pipeline: loaded kernel_cpy_f32_f16                            0x107326590 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_flash_attn_ext_blk', name = 'kernel_flash_attn_ext_blk_nqptg=8_ncpsg=64'
+ggml_metal_library_compile_pipeline: loaded kernel_flash_attn_ext_blk_nqptg=8_ncpsg=64      0xb111d4000 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_flash_attn_ext_f16_dk64_dv64', name = 'kernel_flash_attn_ext_f16_dk64_dv64_mask=1_sinks=1_bias=0_scap=0_kvpad=0_bcm=1_ns10=512_ns20=512_nsg=4'
+ggml_metal_library_compile_pipeline: loaded kernel_flash_attn_ext_f16_dk64_dv64_mask=1_sinks=1_bias=0_scap=0_kvpad=0_bcm=1_ns10=512_ns20=512_nsg=4      0xb111d4300 | th_max =  832 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_add_fuse_1', name = 'kernel_add_fuse_1'
+ggml_metal_library_compile_pipeline: loaded kernel_add_fuse_1                             0xb111d4600 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_mul_mm_f32_f32', name = 'kernel_mul_mm_f32_f32_bci=0_bco=1'
+ggml_metal_library_compile_pipeline: loaded kernel_mul_mm_f32_f32_bci=0_bco=1             0xb111d4900 | th_max =  832 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_argsort_f32_i32_desc', name = 'kernel_argsort_f32_i32_desc'
+ggml_metal_library_compile_pipeline: loaded kernel_argsort_f32_i32_desc                   0xb111d4c00 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_argsort_merge_f32_i32_desc', name = 'kernel_argsort_merge_f32_i32_desc'
+ggml_metal_library_compile_pipeline: loaded kernel_argsort_merge_f32_i32_desc             0xb111d4f00 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_mul_mm_id_map0_ne20_4', name = 'kernel_mul_mm_id_map0_ne20_4_ne02=32'
+ggml_metal_library_compile_pipeline: loaded kernel_mul_mm_id_map0_ne20_4_ne02=32          0xb111d5200 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_mul_mm_id_mxfp4_f32', name = 'kernel_mul_mm_id_mxfp4_f32_bci=0'
+ggml_metal_library_compile_pipeline: loaded kernel_mul_mm_id_mxfp4_f32_bci=0              0xb111d5500 | th_max =  832 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_add_id', name = 'kernel_add_id'
+ggml_metal_library_compile_pipeline: loaded kernel_add_id                                 0xb111d5800 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_swiglu_oai_f32', name = 'kernel_swiglu_oai_f32'
+ggml_metal_library_compile_pipeline: loaded kernel_swiglu_oai_f32                         0xb111d5b00 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_get_rows_f32', name = 'kernel_get_rows_f32'
+ggml_metal_library_compile_pipeline: loaded kernel_get_rows_f32                           0xb111d5e00 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_soft_max_f32_4', name = 'kernel_soft_max_f32_4'
+ggml_metal_library_compile_pipeline: loaded kernel_soft_max_f32_4                         0xb111d6100 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_mul_fuse_1', name = 'kernel_mul_fuse_1'
+ggml_metal_library_compile_pipeline: loaded kernel_mul_fuse_1                             0xb111d6400 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_add_fuse_3', name = 'kernel_add_fuse_3'
+ggml_metal_library_compile_pipeline: loaded kernel_add_fuse_3                             0xb111d6700 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_mul_mv_f32_f32_4', name = 'kernel_mul_mv_f32_f32_4_nsg=4'
+ggml_metal_library_compile_pipeline: loaded kernel_mul_mv_f32_f32_4_nsg=4                 0xb111d6a00 | th_max =  768 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_mul_mv_id_mxfp4_f32', name = 'kernel_mul_mv_id_mxfp4_f32_nsg=2'
+ggml_metal_library_compile_pipeline: loaded kernel_mul_mv_id_mxfp4_f32_nsg=2              0xb111d6d00 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_add_row_c4_fuse_3', name = 'kernel_add_row_c4_fuse_3'
+ggml_metal_library_compile_pipeline: loaded kernel_add_row_c4_fuse_3                      0xb111d7000 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_mul_mv_bf16_f32_4', name = 'kernel_mul_mv_bf16_f32_4_nsg=4'
+ggml_metal_library_compile_pipeline: loaded kernel_mul_mv_bf16_f32_4_nsg=4                0xb111d7300 | th_max =  896 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_flash_attn_ext_vec_f16_dk64_dv64', name = 'kernel_flash_attn_ext_vec_f16_dk64_dv64_mask=1_sink=1_bias=0_scap=0_kvpad=0_ns10=512_ns20=512_nsg=1_nwg=32'
+ggml_metal_library_compile_pipeline: loaded kernel_flash_attn_ext_vec_f16_dk64_dv64_mask=1_sink=1_bias=0_scap=0_kvpad=0_ns10=512_ns20=512_nsg=1_nwg=32      0xb111d7600 | th_max =  768 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_flash_attn_ext_vec_reduce', name = 'kernel_flash_attn_ext_vec_reduce_dv=64_nwg=32'
+ggml_metal_library_compile_pipeline: loaded kernel_flash_attn_ext_vec_reduce_dv=64_nwg=32      0xb111d7900 | th_max = 1024 | th_width =   32
+time=2026-04-11T14:45:38.111+02:00 level=INFO source=index.go:234 msg="shortcut cache growing" size=100
+time=2026-04-11T14:45:39.983+02:00 level=INFO source=index.go:234 msg="shortcut cache growing" size=200
+time=2026-04-11T14:45:41.861+02:00 level=INFO source=index.go:234 msg="shortcut cache growing" size=300
+time=2026-04-11T14:45:44.059+02:00 level=INFO source=index.go:234 msg="shortcut cache growing" size=400
+time=2026-04-11T14:45:46.000+02:00 level=INFO source=index.go:234 msg="shortcut cache growing" size=500
+time=2026-04-11T14:45:48.128+02:00 level=INFO source=index.go:234 msg="shortcut cache growing" size=600
+[GIN] 2026/04/11 - 14:45:49 | 200 | 18.659680625s |       127.0.0.1 | POST     "/api/generate"
+time=2026-04-11T14:45:49.143+02:00 level=DEBUG source=sched.go:592 msg="context for request finished"
+time=2026-04-11T14:45:49.144+02:00 level=DEBUG source=sched.go:309 msg="runner with non-zero duration has gone idle, adding timer" runner.name=registry.ollama.ai/library/gpt-oss:20b runner.inference="[{ID:0 Library:Metal}]" runner.size="13.8 GiB" runner.vram="13.8 GiB" runner.parallel=1 runner.pid=70995 runner.model=/Users/vyacheslavtykhonov/.ollama/models/blobs/sha256-e7b273f9636059a689e3ddcab3716e4f65abe0143ac978e46673ad0e52d09efb runner.num_ctx=32768 duration=5m0s
+time=2026-04-11T14:45:49.144+02:00 level=DEBUG source=sched.go:327 msg="after processing request finished event" runner.name=registry.ollama.ai/library/gpt-oss:20b runner.inference="[{ID:0 Library:Metal}]" runner.size="13.8 GiB" runner.vram="13.8 GiB" runner.parallel=1 runner.pid=70995 runner.model=/Users/vyacheslavtykhonov/.ollama/models/blobs/sha256-e7b273f9636059a689e3ddcab3716e4f65abe0143ac978e46673ad0e52d09efb runner.num_ctx=32768 refCount=0
+time=2026-04-11T14:45:56.904+02:00 level=DEBUG source=sched.go:683 msg="evaluating already loaded" model=/Users/vyacheslavtykhonov/.ollama/models/blobs/sha256-e7b273f9636059a689e3ddcab3716e4f65abe0143ac978e46673ad0e52d09efb
+time=2026-04-11T14:45:56.906+02:00 level=DEBUG source=server.go:1574 msg="completion request" images=0 prompt=467 format=""
+time=2026-04-11T14:45:56.908+02:00 level=DEBUG source=cache.go:151 msg="loading cache slot" id=0 cache=779 prompt=97 used=96 remaining=1
+time=2026-04-11T14:45:56.908+02:00 level=DEBUG source=runner.go:591 msg="Nitro Backpressure" seq=0
+time=2026-04-11T14:45:56.908+02:00 level=DEBUG source=runner.go:622 msg="Nitro Sync: Fast-forwarding GPU" tokens=108
+time=2026-04-11T14:45:56.908+02:00 level=INFO source=runner.go:623 msg="NITRO BYPASS TRIGGERED" tokens=108
+time=2026-04-11T14:45:58.578+02:00 level=INFO source=index.go:234 msg="shortcut cache growing" size=700
+time=2026-04-11T14:46:00.689+02:00 level=INFO source=index.go:234 msg="shortcut cache growing" size=800
+time=2026-04-11T14:46:02.663+02:00 level=INFO source=index.go:234 msg="shortcut cache growing" size=900
+time=2026-04-11T14:46:04.671+02:00 level=INFO source=index.go:234 msg="shortcut cache growing" size=1000
+time=2026-04-11T14:46:06.938+02:00 level=INFO source=index.go:234 msg="shortcut cache growing" size=1100
+[GIN] 2026/04/11 - 14:46:08 | 200 |   11.9376935s |       127.0.0.1 | POST     "/api/generate"
+time=2026-04-11T14:46:08.648+02:00 level=DEBUG source=sched.go:404 msg="context for request finished" runner.name=registry.ollama.ai/library/gpt-oss:20b runner.inference="[{ID:0 Library:Metal}]" runner.size="13.8 GiB" runner.vram="13.8 GiB" runner.parallel=1 runner.pid=70995 runner.model=/Users/vyacheslavtykhonov/.ollama/models/blobs/sha256-e7b273f9636059a689e3ddcab3716e4f65abe0143ac978e46673ad0e52d09efb runner.num_ctx=32768
+time=2026-04-11T14:46:08.648+02:00 level=DEBUG source=sched.go:309 msg="runner with non-zero duration has gone idle, adding timer" runner.name=registry.ollama.ai/library/gpt-oss:20b runner.inference="[{ID:0 Library:Metal}]" runner.size="13.8 GiB" runner.vram="13.8 GiB" runner.parallel=1 runner.pid=70995 runner.model=/Users/vyacheslavtykhonov/.ollama/models/blobs/sha256-e7b273f9636059a689e3ddcab3716e4f65abe0143ac978e46673ad0e52d09efb runner.num_ctx=32768 duration=5m0s
+time=2026-04-11T14:46:08.648+02:00 level=DEBUG source=sched.go:327 msg="after processing request finished event" runner.name=registry.ollama.ai/library/gpt-oss:20b runner.inference="[{ID:0 Library:Metal}]" runner.size="13.8 GiB" runner.vram="13.8 GiB" runner.parallel=1 runner.pid=70995 runner.model=/Users/vyacheslavtykhonov/.ollama/models/blobs/sha256-e7b273f9636059a689e3ddcab3716e4f65abe0143ac978e46673ad0e52d09efb runner.num_ctx=32768 refCount=0

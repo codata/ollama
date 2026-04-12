@@ -29,12 +29,15 @@ type WeightIndex struct {
 	BitMap       map[string][]uint64
 	
 	// ShortcutCache stores previously computed results for specific semantic signatures
+	shortcutMu    sync.RWMutex
 	ShortcutCache map[uint64]int32
 	
 	// Metadata contains additional indexed information about layers or weights
 	Metadata     map[string]any
 
 	Method       string
+	dirty        bool
+	learnCount   int
 }
 
 // BuildWeightIndex creates a new index from a model's GGML structure.
@@ -212,8 +215,8 @@ func BuildSigKey(sig []uint64) uint64 {
 
 // Predict attempts to find a shortcut token for the given signature
 func (idx *WeightIndex) Predict(sig []uint64) (int32, float32, bool) {
-	idx.mu.RLock()
-	defer idx.mu.RUnlock()
+	idx.shortcutMu.RLock()
+	defer idx.shortcutMu.RUnlock()
 
 	key := BuildSigKey(sig)
 	if token, ok := idx.ShortcutCache[key]; ok {
@@ -224,14 +227,24 @@ func (idx *WeightIndex) Predict(sig []uint64) (int32, float32, bool) {
 
 // Learn registers a new successful shortcut in the index
 func (idx *WeightIndex) Learn(sig []uint64, token int32) {
-	idx.mu.Lock()
-	defer idx.mu.Unlock()
+	idx.shortcutMu.Lock()
+	defer idx.shortcutMu.Unlock()
 
 	key := BuildSigKey(sig)
 	if _, exists := idx.ShortcutCache[key]; !exists {
 		idx.ShortcutCache[key] = token
-		if len(idx.ShortcutCache)%100 == 0 {
-			slog.Info("shortcut cache growing", "size", len(idx.ShortcutCache))
+		idx.dirty = true
+		idx.learnCount++
+		
+		// Auto-save every 500 new shortcuts to prevent data loss on crash/pkill
+		if idx.learnCount >= 500 {
+			idx.learnCount = 0
+			// Use a goroutine to avoid blocking the inference loop
+			go func(mpath string, i *WeightIndex) {
+				modelName := filepath.Base(mpath)
+				indexPath := filepath.Join("index", modelName+".index")
+				i.Save(indexPath)
+			}(idx.ModelPath, idx)
 		}
 	}
 }
@@ -239,7 +252,9 @@ func (idx *WeightIndex) Learn(sig []uint64, token int32) {
 // Reset clears the dynamic shortcuts and metadata
 func (idx *WeightIndex) Reset() {
 	idx.mu.Lock()
+	idx.shortcutMu.Lock()
 	defer idx.mu.Unlock()
+	defer idx.shortcutMu.Unlock()
 	idx.ShortcutCache = make(map[uint64]int32)
 	idx.Metadata["last_reset"] = time.Now()
 }
@@ -291,7 +306,9 @@ func (idx *WeightIndex) Lookup(key string) (any, bool) {
 
 func (idx *WeightIndex) StatusText() string {
 	idx.mu.RLock()
+	idx.shortcutMu.RLock()
 	defer idx.mu.RUnlock()
+	defer idx.shortcutMu.RUnlock()
 	count := len(idx.VectorMap)
 	if idx.Method == "bit-signature" {
 		count = len(idx.BitMap)
@@ -310,7 +327,9 @@ func (idx *WeightIndex) String() string {
 
 func (idx *WeightIndex) Save(path string) error {
 	idx.mu.RLock()
+	idx.shortcutMu.RLock()
 	defer idx.mu.RUnlock()
+	defer idx.shortcutMu.RUnlock()
 
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {

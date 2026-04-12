@@ -94,6 +94,7 @@ type Sequence struct {
 	window         []uint64
 	replayBuffer   []int
 	isNitroSyncing bool // Concurrency lock for GPU catch-up
+	isDetached     bool // True if the user request has finished but GPU is still syncing
 
 	// shift if context window is exceeded
 	shift bool
@@ -172,7 +173,7 @@ func (s *Server) NewSequence(prompt string, images []llm.ImageData, params NewSe
 		}
 	}
 
-	return &Sequence{
+	seq := &Sequence{
 		inputs:           inputs,
 		numPromptInputs:  len(inputs),
 		numPredict:       params.numPredict,
@@ -189,7 +190,14 @@ func (s *Server) NewSequence(prompt string, images []llm.ImageData, params NewSe
 		topLogprobs:      params.topLogprobs,
 		window:           make([]uint64, 8),
 		replayBuffer:     make([]int, 0),
-	}, nil
+	}
+
+	// Pre-populate window from the end of the prompt to allow instant bypass triggers
+	for i := 0; i < 8 && i < len(inputs); i++ {
+		seq.window[7-i] = uint64(inputs[len(inputs)-1-i].token)
+	}
+
+	return seq, nil
 }
 
 // calculateLogprobsLlama converts raw logits to log probabilities and finds top K tokens
@@ -360,9 +368,10 @@ func (s *Server) removeSequence(seqIndex int, reason llm.DoneReason) {
 	seq.doneReason = reason
 	close(seq.responses)
 	close(seq.embedding)
-	seq.cache.InUse = false
+	if !seq.isDetached {
+		s.seqsSem.Release(1)
+	}
 	s.seqs[seqIndex] = nil
-	s.seqsSem.Release(1)
 }
 
 func (s *Server) run(ctx context.Context) {
@@ -504,7 +513,11 @@ func (s *Server) processBatch(tokenBatch *llama.Batch, embedBatch *llama.Batch) 
 			seq.inputs[0].token = int(predToken)
 			
 			if s.model.TokenIsEog(int(predToken)) {
-				s.removeSequence(seqIdx, llm.DoneReasonStop)
+				seq.doneReason = llm.DoneReasonStop
+				seq.isDetached = true
+				slog.Debug("Nitro Early Completion (Async Sync)", "seq", seqIdx)
+				close(seq.responses)
+				s.seqsSem.Release(1)
 				break
 			}
 		}
@@ -613,6 +626,10 @@ func (s *Server) processBatch(tokenBatch *llama.Batch, embedBatch *llama.Batch) 
 		// Only release the Nitro Lock once the GPU has fully synced (empty inputs)
 		if seq.isNitroSyncing && len(seq.inputs) == 0 {
 			seq.isNitroSyncing = false
+			if seq.isDetached {
+				s.removeSequence(i, seq.doneReason)
+				continue
+			}
 			slog.Debug("Nitro Sync (Llama) Complete", "seqIdx", i)
 		}
 
@@ -624,9 +641,7 @@ func (s *Server) processBatch(tokenBatch *llama.Batch, embedBatch *llama.Batch) 
 
 		// don't sample prompt processing
 		if len(seq.inputs) != 0 {
-			if seq.isNitroSyncing {
-				seq.generationDuration += time.Since(t)
-			} else {
+			if !seq.isNitroSyncing {
 				seq.processingDuration += time.Since(t)
 			}
 			continue
@@ -1024,7 +1039,8 @@ func (s *Server) load(w http.ResponseWriter, r *http.Request) {
 	case llm.LoadOperationCommit:
 		s.batchSize = req.BatchSize
 		s.parallel = req.Parallel
-		s.seqs = make([]*Sequence, s.parallel)
+		// Increase seqs buffer to allow background syncs without blocking active slots
+		s.seqs = make([]*Sequence, s.parallel+32)
 		s.seqsSem = semaphore.NewWeighted(int64(s.parallel))
 
 		numGPU := 0

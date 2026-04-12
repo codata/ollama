@@ -1,0 +1,12 @@
+# Start from your optimized 20B model
+FROM gpt-oss-fast
+
+# The "Navigation Layer" - the small model that scouts ahead
+# (Using llama3.2:1b as the high-speed draft engine)
+PARAMETER speculative_model llama3.2:1b
+
+# Keep your other speed optimizations
+PARAMETER num_batch 4096
+PARAMETER num_ctx 8192
+PARAMETER num_thread 8
+PARAMETER f16_kv true
