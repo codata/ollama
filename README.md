@@ -87,6 +87,15 @@ See [ollama.com/library](https://ollama.com/library) for the full list.
 
 See the [quickstart guide](https://docs.ollama.com/quickstart) for more details.
 
+## Nitro Performance Features
+
+This fork of Ollama includes the **Nitro Semantic Bypass** engine, which provides massive performance gains for repetitive generation tasks.
+
+- [Nitro Semantic Bypass](docs/NITRO_BYPASS.md): Core indexing and bypass mechanism.
+- [Asynchronous State Sync](docs/ASYNC_STATE_SYNC.md): Decoupled GPU syncing for high throughput.
+- [Performance Metrics](docs/METRICS_AND_REPORTING.md): Accurate token speed and duration tracking.
+- [Testing Guide](docs/TESTING_GUIDE.md): How to validate and benchmark the implementation.
+
 ## REST API
 
 Ollama has a REST API for running and managing models.
