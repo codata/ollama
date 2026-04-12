@@ -51,13 +51,20 @@ do
         REQ_END=$(date +%s)
         REQ_ELAPSED=$((REQ_END - REQ_START))
         
-        # Calculate eval rate
+        # Calculate eval rates
         E_COUNT=$(echo $RESPONSE | grep -o '"eval_count":[0-9]*' | cut -d: -f2)
         E_DUR=$(echo $RESPONSE | grep -o '"eval_duration":[0-9]*' | cut -d: -f2)
+        PE_COUNT=$(echo $RESPONSE | grep -o '"prompt_eval_count":[0-9]*' | cut -d: -f2)
+        PE_DUR=$(echo $RESPONSE | grep -o '"prompt_eval_duration":[0-9]*' | cut -d: -f2)
+
         if [ ! -z "$E_COUNT" ] && [ ! -z "$E_DUR" ] && [ "$E_DUR" -gt 0 ]; then
             EVAL_RATE=$(echo "scale=2; $E_COUNT / ($E_DUR / 1000000000)" | bc)
         fi
-        echo "   <- Request #$i Finished (Eval Rate: ${EVAL_RATE:-N/A} tokens/s, Execution: ${REQ_ELAPSED} sec)"
+        if [ ! -z "$PE_COUNT" ] && [ ! -z "$PE_DUR" ] && [ "$PE_DUR" -gt 0 ]; then
+            PE_RATE=$(echo "scale=2; $PE_COUNT / ($PE_DUR / 1000000000)" | bc)
+        fi
+
+        echo "   <- Request #$i Finished (Prompt: ${PE_RATE:-N/A} t/s | Eval: ${EVAL_RATE:-N/A} t/s | Time: ${REQ_ELAPSED}s)"
     ) &
 done
 

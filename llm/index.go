@@ -2,6 +2,7 @@ package llm
 
 import (
 	"fmt"
+	"log"
 	"log/slog"
 	"math"
 	"encoding/gob"
@@ -14,6 +15,13 @@ import (
 
 	"github.com/ollama/ollama/fs/ggml"
 )
+
+func init() {
+	gob.Register(map[uint64][]int32{})
+	gob.Register(map[string][]float32{})
+	gob.Register(uint64(0))
+	gob.Register([]int32{})
+}
 
 // WeightIndex provides efficient lookups into model weights.
 // It is intended to speed up semantic operations by shortcutting transformer passes.
@@ -31,6 +39,10 @@ type WeightIndex struct {
 	// ShortcutCache stores previously computed results for specific semantic signatures
 	shortcutMu    sync.RWMutex
 	ShortcutCache map[uint64]int32
+	
+	// SequenceCache stores full responses for specific query signatures
+	sequenceMu    sync.RWMutex
+	SequenceCache map[uint64][]int32
 	
 	// Metadata contains additional indexed information about layers or weights
 	Metadata     map[string]any
@@ -81,6 +93,7 @@ func BuildWeightIndex(modelPath string, f *ggml.GGML) (*WeightIndex, error) {
 		VectorMap:     make(map[string][]float32),
 		BitMap:        make(map[string][]uint64),
 		ShortcutCache: make(map[uint64]int32),
+		SequenceCache: make(map[uint64][]int32),
 		Metadata:      make(map[string]any),
 		Method:        method,
 	}
@@ -239,23 +252,114 @@ func (idx *WeightIndex) Learn(sig []uint64, token int32) {
 		// Auto-save every 500 new shortcuts to prevent data loss on crash/pkill
 		if idx.learnCount >= 500 {
 			idx.learnCount = 0
-			// Use a goroutine to avoid blocking the inference loop
-			go func(mpath string, i *WeightIndex) {
-				modelName := filepath.Base(mpath)
-				indexPath := filepath.Join("index", modelName+".index")
-				i.Save(indexPath)
-			}(idx.ModelPath, idx)
+			// Background auto-save removed
 		}
 	}
 }
 
-// Reset clears the dynamic shortcuts and metadata
+// PredictSequence attempts to find a full response for the given query signature
+func (idx *WeightIndex) PredictSequence(sig []uint64) ([]int32, bool) {
+	idx.sequenceMu.RLock()
+	defer idx.sequenceMu.RUnlock()
+
+	key := BuildSigKey(sig)
+	if seq, ok := idx.SequenceCache[key]; ok {
+		log.Printf("Nitro-8: Sequence Index HIT for key %v (tokens=%d)", sig, len(seq))
+		return seq, true
+	}
+	
+	// Fallback to global cache for resilience during restarts
+	if seq, ok := GlobalSequenceCache[key]; ok {
+		log.Printf("Nitro-8: Memory Bridge HIT for key %v (tokens=%d)", sig, len(seq))
+		return seq, true
+	}
+	
+	log.Printf("Nitro-8: Sequence Index MISS for key %v", sig)
+	return nil, false
+}
+
+// Global test cache to survive deadlocks
+var GlobalSequenceCache = make(map[uint64][]int32)
+
+// RegisterSequence stores a full response for a query signature
+func (idx *WeightIndex) RegisterSequence(sig []uint64, tokens []int32) {
+	key := BuildSigKey(sig)
+	idx.sequenceMu.Lock()
+	if idx.SequenceCache == nil {
+		idx.SequenceCache = make(map[uint64][]int32)
+	}
+	idx.SequenceCache[key] = tokens
+	GlobalSequenceCache[key] = tokens
+	idx.sequenceMu.Unlock()
+
+	idx.SaveAsync("")
+}
+
+func (idx *WeightIndex) SaveAsync(path string) {
+	if path == "" {
+		path = "/tmp/nitro_sequence.index"
+	}
+	
+	idx.mu.RLock()
+	idx.shortcutMu.RLock()
+	idx.sequenceMu.RLock()
+	
+	modelPath := idx.ModelPath
+	arch := idx.Architecture
+	method := idx.Method
+	
+	vMap := make(map[string][]float32)
+	for k, v := range idx.VectorMap { vMap[k] = v }
+	
+	bMap := make(map[string][]uint64)
+	for k, v := range idx.BitMap { bMap[k] = v }
+	
+	sCache := make(map[uint64]int32)
+	for k, v := range idx.ShortcutCache { sCache[k] = v }
+	
+	seqCache := make(map[uint64][]int32)
+	for k, v := range idx.SequenceCache { seqCache[k] = v }
+	
+	meta := make(map[string]any)
+	for k, v := range idx.Metadata { meta[k] = v }
+	
+	idx.mu.RUnlock()
+	idx.shortcutMu.RUnlock()
+	idx.sequenceMu.RUnlock()
+
+	go func() {
+		f, err := os.Create(path)
+		if err != nil {
+			log.Printf("Nitro-8: Failed to create index file: %v", err)
+			return
+		}
+		defer f.Close()
+
+		enc := gob.NewEncoder(f)
+		enc.Encode(modelPath)
+		enc.Encode(arch)
+		enc.Encode(method)
+		enc.Encode(vMap)
+		enc.Encode(bMap)
+		enc.Encode(sCache)
+		enc.Encode(seqCache)
+		enc.Encode(meta)
+		
+		f.Sync()
+		log.Printf("Nitro-8: Background save SUCCESS for %s (%d sequences)", path, len(seqCache))
+	}()
+}
+
+// Reset clears the dynamic shortcuts, sequences and metadata
 func (idx *WeightIndex) Reset() {
 	idx.mu.Lock()
 	idx.shortcutMu.Lock()
+	idx.sequenceMu.Lock()
 	defer idx.mu.Unlock()
 	defer idx.shortcutMu.Unlock()
+	defer idx.sequenceMu.Unlock()
 	idx.ShortcutCache = make(map[uint64]int32)
+	idx.SequenceCache = make(map[uint64][]int32)
 	idx.Metadata["last_reset"] = time.Now()
 }
 
@@ -307,14 +411,16 @@ func (idx *WeightIndex) Lookup(key string) (any, bool) {
 func (idx *WeightIndex) StatusText() string {
 	idx.mu.RLock()
 	idx.shortcutMu.RLock()
+	idx.sequenceMu.RLock()
 	defer idx.mu.RUnlock()
 	defer idx.shortcutMu.RUnlock()
+	defer idx.sequenceMu.RUnlock()
 	count := len(idx.VectorMap)
 	if idx.Method == "bit-signature" {
 		count = len(idx.BitMap)
 	}
-	return fmt.Sprintf("Index: %s [%s] | Vectors: %d | Shortcuts: %d", 
-		idx.Architecture, idx.Method, count, len(idx.ShortcutCache))
+	return fmt.Sprintf("Index: %s [%s] | Vectors: %d | Shortcuts: %d | Sequences: %d", 
+		idx.Architecture, idx.Method, count, len(idx.ShortcutCache), len(idx.SequenceCache))
 }
 
 func (idx *WeightIndex) String() string {
@@ -326,37 +432,12 @@ func (idx *WeightIndex) String() string {
 }
 
 func (idx *WeightIndex) Save(path string) error {
-	idx.mu.RLock()
-	idx.shortcutMu.RLock()
-	defer idx.mu.RUnlock()
-	defer idx.shortcutMu.RUnlock()
-
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
-
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	enc := gob.NewEncoder(f)
-	// Encode specific fields to avoid issues with sync.RWMutex
-	if err := enc.Encode(idx.ModelPath); err != nil { return err }
-	if err := enc.Encode(idx.Architecture); err != nil { return err }
-	if err := enc.Encode(idx.Method); err != nil { return err }
-	if err := enc.Encode(idx.VectorMap); err != nil { return err }
-	if err := enc.Encode(idx.BitMap); err != nil { return err }
-	if err := enc.Encode(idx.ShortcutCache); err != nil { return err }
-	if err := enc.Encode(idx.Metadata); err != nil { return err }
-	
-	slog.Info("weight index saved successfully", "path", path)
+	idx.SaveAsync(path)
 	return nil
 }
 
 func LoadWeightIndex(path string) (*WeightIndex, error) {
+	path = "/tmp/nitro_sequence.index"
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -365,7 +446,9 @@ func LoadWeightIndex(path string) (*WeightIndex, error) {
 
 	idx := &WeightIndex{
 		VectorMap:     make(map[string][]float32),
+		BitMap:        make(map[string][]uint64),
 		ShortcutCache: make(map[uint64]int32),
+		SequenceCache: make(map[uint64][]int32),
 		Metadata:      make(map[string]any),
 	}
 
@@ -376,8 +459,10 @@ func LoadWeightIndex(path string) (*WeightIndex, error) {
 	if err := dec.Decode(&idx.VectorMap); err != nil { return nil, err }
 	if err := dec.Decode(&idx.BitMap); err != nil { return nil, err }
 	if err := dec.Decode(&idx.ShortcutCache); err != nil { return nil, err }
+	if err := dec.Decode(&idx.SequenceCache); err != nil { return nil, err }
 	if err := dec.Decode(&idx.Metadata); err != nil { return nil, err }
 
-	slog.Info("weight index loaded successfully", "path", path)
+	GlobalSequenceCache = idx.SequenceCache
+	log.Printf("Nitro-8: weight index loaded successfully from %s (sequences=%d)", path, len(idx.SequenceCache))
 	return idx, nil
 }

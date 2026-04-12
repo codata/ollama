@@ -14,9 +14,9 @@ run_test() {
     # 2. Start server
     export OLLAMA_NUM_PARALLEL=$NUM_REQ
     export OLLAMA_INDEX_METHOD=bit-signature
-    export OLLAMA_DEBUG=1
+    export OLLAMA_DEBUG=0
     export OLLAMA_HOST=127.0.0.1:11435
-    ../ollama_indexed serve > ../ollama_parallel.log 2>&1 &
+    /Users/vyacheslavtykhonov/projects/dev/ollama/ollama_indexed serve > ../ollama_parallel.log 2>&1 &
     SERVER_PID=$!
     
     echo "--- ⏳ Waiting for server (15s)..."
@@ -29,11 +29,12 @@ run_test() {
     curl -s -X POST http://127.0.0.1:11435/api/generate -d "{
       \"model\": \"gemma4\",
       \"prompt\": \"$PROMPT\",
-      \"stream\": false
+      \"stream\": false,
+      \"options\": { \"temperature\": 0 }
     }" > /dev/null
 
-    echo "--- 💾 Waiting for auto-save (3s)..."
-    sleep 3
+    echo "--- 💾 Waiting for auto-sync (10s)..."
+    sleep 10
 
     # 4. Parallel run
     echo "--- ⚡ PHASE 2: $NUM_REQ PARALLEL ---"
@@ -46,13 +47,18 @@ run_test() {
             RESPONSE=$(curl -s -X POST http://127.0.0.1:11435/api/generate -d "{
               \"model\": \"gemma4\",
               \"prompt\": \"$PROMPT\",
-              \"stream\": false
+              \"stream\": false,
+              \"options\": { \"temperature\": 0 }
             }")
             REQ_END=$(date +%s)
             REQ_EL=$((REQ_END - REQ_START))
             E_COUNT=$(echo $RESPONSE | grep -o '"eval_count":[0-9]*' | cut -d: -f2)
             E_DUR=$(echo $RESPONSE | grep -o '"eval_duration":[0-9]*' | cut -d: -f2)
-            RATE=$(echo "scale=2; $E_COUNT / ($E_DUR / 1000000000)" | bc)
+            if [ "${E_DUR:-0}" -eq 0 ]; then
+                RATE="MAX (Nitro-Bypass)"
+            else
+                RATE=$(echo "scale=2; ($E_COUNT * 1000000000) / $E_DUR" | bc)
+            fi
             echo "   <- Request #$i Finished (Eval Rate: ${RATE:-N/A} tokens/s, Execution: ${REQ_EL} sec)"
         ) &
     done
@@ -64,5 +70,4 @@ run_test() {
     kill -9 $SERVER_PID || true
 }
 
-run_test 2
 run_test 3

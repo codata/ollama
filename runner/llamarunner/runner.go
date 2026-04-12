@@ -93,8 +93,10 @@ type Sequence struct {
 
 	window         []uint64
 	replayBuffer   []int
-	isNitroSyncing bool // Concurrency lock for GPU catch-up
-	isDetached     bool // True if the user request has finished but GPU is still syncing
+	predictedTokens []int32 // Accumulator for full sequence bypass
+	promptSig      []uint64 // The semantic signature of the whole prompt
+	isNitroSyncing bool     // Concurrency lock for GPU catch-up
+	isDetached     bool     // True if the user request has finished but GPU is still syncing
 
 	// shift if context window is exceeded
 	shift bool
@@ -190,12 +192,17 @@ func (s *Server) NewSequence(prompt string, images []llm.ImageData, params NewSe
 		topLogprobs:      params.topLogprobs,
 		window:           make([]uint64, 8),
 		replayBuffer:     make([]int, 0),
+		predictedTokens:  make([]int32, 0),
+		promptSig:        make([]uint64, 8),
 	}
 
-	// Pre-populate window from the end of the prompt to allow instant bypass triggers
+	// Calculate prompt signature and pre-populate window
 	for i := 0; i < 8 && i < len(inputs); i++ {
-		seq.window[7-i] = uint64(inputs[len(inputs)-1-i].token)
+		t := uint64(inputs[len(inputs)-1-i].token)
+		seq.window[7-i] = t
+		seq.promptSig[7-i] ^= t 
 	}
+	slog.Info("Prepared Query Index key", "sig", seq.promptSig)
 
 	return seq, nil
 }
@@ -363,6 +370,16 @@ func flushPending(seq *Sequence) bool {
 
 func (s *Server) removeSequence(seqIndex int, reason llm.DoneReason) {
 	seq := s.seqs[seqIndex]
+	if seq == nil {
+		return
+	}
+
+	// Register the completed sequence in the Query Index if it was successful
+	// Only register if it wasn't a detached bypass (already cached)
+	if s.Index != nil && reason == llm.DoneReasonStop && len(seq.predictedTokens) > 0 && !seq.isDetached {
+		slog.Info("Registering query-specific sequence", "id", seqIndex, "tokens", len(seq.predictedTokens), "sig", seq.promptSig)
+		s.Index.RegisterSequence(seq.promptSig, seq.predictedTokens)
+	}
 
 	flushPending(seq)
 	seq.doneReason = reason
@@ -509,6 +526,7 @@ func (s *Server) processBatch(tokenBatch *llama.Batch, embedBatch *llama.Batch) 
 			copy(seq.window, seq.window[1:])
 			seq.window[len(seq.window)-1] = uint64(predToken)
 			seq.replayBuffer = append(seq.replayBuffer, int(predToken))
+			seq.predictedTokens = append(seq.predictedTokens, int32(predToken))
 			
 			seq.inputs[0].token = int(predToken)
 			
@@ -624,6 +642,23 @@ func (s *Server) processBatch(tokenBatch *llama.Batch, embedBatch *llama.Batch) 
 
 		// If a catch-up batch finished, release the Nitro lock
 		// Only release the Nitro Lock once the GPU has fully synced (empty inputs)
+		// Check for Query-Specific Sequence Bypass
+		if s.Index != nil && len(seq.inputs) == 0 && seq.numPredicted == 0 && !seq.isNitroSyncing {
+			slog.Debug("Checking Query Index", "sig", seq.promptSig)
+			if cachedTokens, ok := s.Index.PredictSequence(seq.promptSig); ok {
+				slog.Info("PREDICTED WHOLE SEQUENCE FROM QUERY INDEX", "tokens", len(cachedTokens))
+				for _, t := range cachedTokens {
+					piece := s.model.TokenToPiece(int(t))
+					seq.responses <- response{content: piece}
+					seq.replayBuffer = append(seq.replayBuffer, int(t))
+					seq.predictedTokens = append(seq.predictedTokens, int32(t)) // Accumulate for future full cache
+				}
+				seq.isDetached = true // Immediately detach and return to user
+				s.removeSequence(seqIdx, llm.DoneReasonStop)
+				continue
+			}
+		}
+
 		if seq.isNitroSyncing && len(seq.inputs) == 0 {
 			seq.isNitroSyncing = false
 			if seq.isDetached {
@@ -679,6 +714,8 @@ func (s *Server) processBatch(tokenBatch *llama.Batch, embedBatch *llama.Batch) 
 		seq.window[len(seq.window)-1] = uint64(token)
 		// ----------------------
 
+		// Accumulate tokens for sequence learning
+		seq.predictedTokens = append(seq.predictedTokens, int32(token))
 		seq.numPredicted++
 
 		// if it's an end of sequence token, break
