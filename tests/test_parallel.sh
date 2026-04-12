@@ -3,21 +3,30 @@ set -e
 
 echo "--- 🚀 STARTING PARALLEL STABILITY TEST (10 Request) ---"
 
-# 1. Cleanup
+# 1. Cleanup - Crucial to clear VRAM before starting a new compute-intensive test
 pkill -9 ollama_indexed || true
+sleep 3
 rm -f ../ollama_parallel.log
 
 # 2. Start server
+BASE_DIR=$(cd "$(dirname "$0")/.." && pwd)
 export OLLAMA_NUM_PARALLEL=10
 export OLLAMA_INDEX_METHOD=bit-signature
 export OLLAMA_DEBUG=1
 export OLLAMA_HOST=127.0.0.1:11435
-../ollama_indexed serve > ../ollama_parallel.log 2>&1 &
+echo "--- 🚀 Launching server from $BASE_DIR ---"
+"$BASE_DIR/ollama_indexed" serve > "$BASE_DIR/ollama_parallel.log" 2>&1 &
 SERVER_PID=$!
-trap "kill -9 $SERVER_PID" EXIT
+trap "kill -9 $SERVER_PID 2>/dev/null || true" EXIT
 
 echo "--- ⏳ Waiting for server (15s)..."
-sleep 15
+for i in {1..15}; do
+    if curl -s http://127.0.0.1:11435/api/version > /dev/null; then
+        echo "   [✓] Server is UP"
+        break
+    fi
+    sleep 1
+done
 
 PROMPT="create description of variable (definition, units of measurements, properties, attributes), list internal variables (units, value) and provide result in json: height"
 
@@ -58,10 +67,10 @@ do
         PE_DUR=$(echo $RESPONSE | grep -o '"prompt_eval_duration":[0-9]*' | cut -d: -f2)
 
         if [ ! -z "$E_COUNT" ] && [ ! -z "$E_DUR" ] && [ "$E_DUR" -gt 0 ]; then
-            EVAL_RATE=$(echo "scale=2; $E_COUNT / ($E_DUR / 1000000000)" | bc)
+            EVAL_RATE=$(echo "scale=2; ($E_COUNT * 1000000000.0) / $E_DUR" | bc)
         fi
         if [ ! -z "$PE_COUNT" ] && [ ! -z "$PE_DUR" ] && [ "$PE_DUR" -gt 0 ]; then
-            PE_RATE=$(echo "scale=2; $PE_COUNT / ($PE_DUR / 1000000000)" | bc)
+            PE_RATE=$(echo "scale=2; ($PE_COUNT * 1000000000.0) / $PE_DUR" | bc)
         fi
 
         echo "   <- Request #$i Finished (Prompt: ${PE_RATE:-N/A} t/s | Eval: ${EVAL_RATE:-N/A} t/s | Time: ${REQ_ELAPSED}s)"

@@ -124,6 +124,7 @@ type Sequence struct {
 	bypassed        bool
 	isFinished      bool
 	isReclaimable   bool // Nitro-8: True only after the final HTTP packet is flushed
+	isClosed        bool // Nitro-8: Ensure channels only closed once
 }
 
 type NewSequenceParams struct {
@@ -485,9 +486,12 @@ func (s *Server) removeSequenceUnlocked(seqIdx int, reason llm.DoneReason) {
 		}
 	}
 
-	close(seq.responses)
-	if seq.embedding != nil {
-		close(seq.embedding)
+	if !seq.isClosed {
+		close(seq.responses)
+		if seq.embedding != nil {
+			close(seq.embedding)
+		}
+		seq.isClosed = true
 	}
 
 	// Logical tagging for physical reap in the next sync window
@@ -662,13 +666,20 @@ func (s *Server) forwardBatch(pendingBatch batchState) (nextBatch batchState, er
 				seq.processingDuration = time.Millisecond * 5 // Synthetic processing time for bypass
 				
 				// Use a goroutine to prevent deadlocking if the HTTP handler isn't ready to read yet
-				go func(sReq *Sequence, content string) {
+				go func(sReq *Sequence, content string, srv *Server) {
 					sReq.responses <- response{content: content}
-					close(sReq.responses)
-					if sReq.embedding != nil {
-						close(sReq.embedding)
+					
+					// Safely close using server mutex to avoid race with reaper
+					srv.mu.Lock()
+					if !sReq.isClosed {
+						close(sReq.responses)
+						if sReq.embedding != nil {
+							close(sReq.embedding)
+						}
+						sReq.isClosed = true
 					}
-				}(seq, fullResponse)
+					srv.mu.Unlock()
+				}(seq, fullResponse, s)
 
 				// Standard reaper at start of loop will free physical resources in ms
 				continue

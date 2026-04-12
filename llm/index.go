@@ -328,13 +328,13 @@ func (idx *WeightIndex) SaveAsync(path string) {
 	idx.sequenceMu.RUnlock()
 
 	go func() {
-		f, err := os.Create(path)
+		tmpPath := path + ".tmp"
+		f, err := os.Create(tmpPath)
 		if err != nil {
-			log.Printf("Nitro-8: Failed to create index file: %v", err)
+			log.Printf("Nitro-8: Failed to create temp index file: %v", err)
 			return
 		}
-		defer f.Close()
-
+		
 		enc := gob.NewEncoder(f)
 		enc.Encode(modelPath)
 		enc.Encode(arch)
@@ -346,7 +346,13 @@ func (idx *WeightIndex) SaveAsync(path string) {
 		enc.Encode(meta)
 		
 		f.Sync()
-		log.Printf("Nitro-8: Background save SUCCESS for %s (%d sequences)", path, len(seqCache))
+		f.Close()
+		
+		if err := os.Rename(tmpPath, path); err != nil {
+			log.Printf("Nitro-8: Atomic rename failure: %v", err)
+		} else {
+			log.Printf("Nitro-8: Background save SUCCESS for %s (%d sequences)", path, len(seqCache))
+		}
 	}()
 }
 
