@@ -77,6 +77,9 @@ type Sequence struct {
 	// number of tokens to predict
 	numPredict int
 
+	// CODATA Fabric: Full response text for research indexing
+	responseString string
+
 	samplingCtx *llama.SamplingContext
 
 	// channel to send back the embedding if embedding only
@@ -95,7 +98,9 @@ type Sequence struct {
 	replayBuffer   []int
 	predictedTokens []int32 // Accumulator for full sequence bypass
 	promptSig      []uint64 // The semantic signature of the whole prompt
-	isNitroSyncing bool     // Concurrency lock for GPU catch-up
+	promptTokens   []int32
+	promptString   string
+	isFabricSyncing bool     // Concurrency lock for GPU catch-up
 	isDetached     bool     // True if the user request has finished but GPU is still syncing
 
 	// shift if context window is exceeded
@@ -193,6 +198,7 @@ func (s *Server) NewSequence(prompt string, images []llm.ImageData, params NewSe
 		window:           make([]uint64, 8),
 		replayBuffer:     make([]int, 0),
 		predictedTokens:  make([]int32, 0),
+		promptString:     prompt,
 		promptSig:        make([]uint64, 8),
 	}
 
@@ -328,7 +334,7 @@ type Server struct {
 	// next sequence for prompt processing to avoid starvation
 	nextSeq int
 
-	Index *llm.WeightIndex // Nitro Index
+	Index *llm.WeightIndex // Fabric Index
 }
 
 func (s *Server) allNil() bool {
@@ -377,8 +383,8 @@ func (s *Server) removeSequence(seqIndex int, reason llm.DoneReason) {
 	// Register the completed sequence in the Query Index if it was successful
 	// Only register if it wasn't a detached bypass (already cached)
 	if s.Index != nil && reason == llm.DoneReasonStop && len(seq.predictedTokens) > 0 && !seq.isDetached {
-		slog.Info("Registering query-specific sequence", "id", seqIndex, "tokens", len(seq.predictedTokens), "sig", seq.promptSig)
-		s.Index.RegisterSequence(seq.promptSig, seq.predictedTokens)
+		slog.Info("CODATA Fabric: Registering Llama sequence", "id", seqIndex, "tokens", len(seq.predictedTokens))
+		s.Index.RegisterSequence(seq.predictedTokens, seq.promptTokens, seq.responseString)
 	}
 
 	flushPending(seq)
@@ -480,26 +486,26 @@ func (s *Server) processBatch(tokenBatch *llama.Batch, embedBatch *llama.Batch) 
 			}
 		}
 
-		// --- HYPER-BYPASS (Nitro-Universal + Lock) ---
+		// --- HYPER-BYPASS (Fabric-Universal + Lock) ---
 		isBypassing := false
 		bypassCount := 0
-		maxNitroBypass := 512
+		maxFabricBypass := 512
 		var lastToken int32 = -1
 		
 		// Threshold relaxed to 0.9 for reasoning models/thinking blocks
 		burstGuard := make(map[uint64]bool)
-	NitroLoop:
-		for s.Index != nil && s.Index.Method == "bit-signature" && !seq.isNitroSyncing {
+	FabricLoop:
+		for s.Index != nil && s.Index.Method == "bit-signature" && !seq.isFabricSyncing {
 			if len(seq.inputs) != 1 || seq.inputs[0].token == 0 {
 				break
 			}
 
-			if bypassCount >= maxNitroBypass {
+			if bypassCount >= maxFabricBypass {
 				break
 			}
 
 			predToken, sim, ok := s.Index.Predict(seq.window)
-			currentContext := llm.BuildSigKey(seq.window)
+			currentContext := llm.BuildShortcutKey(seq.window)
 			if !ok || sim < 0.9 || burstGuard[currentContext] { 
 				break
 			}
@@ -509,12 +515,13 @@ func (s *Server) processBatch(tokenBatch *llama.Batch, embedBatch *llama.Batch) 
 			}
 
 			piece := s.model.TokenToPiece(int(predToken))
+			seq.responseString += piece // Collect research text for indexing
 			select {
 			case seq.responses <- response{content: piece}:
 			default:
-				// Channel full, break Nitro loop to let GPU handle it (throttling)
-				slog.Debug("Nitro Backpressure (Llama)", "seq", seqIdx)
-				break NitroLoop 
+				// Channel full, break Fabric loop to let GPU handle it (throttling)
+				slog.Debug("Fabric Backpressure (Llama)", "seq", seqIdx)
+				break FabricLoop 
 			}
 
 			isBypassing = true
@@ -533,7 +540,7 @@ func (s *Server) processBatch(tokenBatch *llama.Batch, embedBatch *llama.Batch) 
 			if s.model.TokenIsEog(int(predToken)) {
 				seq.doneReason = llm.DoneReasonStop
 				seq.isDetached = true
-				slog.Debug("Nitro Early Completion (Async Sync)", "seq", seqIdx)
+				slog.Debug("Fabric Early Completion (Async Sync)", "seq", seqIdx)
 				close(seq.responses)
 				s.seqsSem.Release(1)
 				break
@@ -546,9 +553,9 @@ func (s *Server) processBatch(tokenBatch *llama.Batch, embedBatch *llama.Batch) 
 				toSync[i] = input{token: t}
 			}
 			seq.inputs = toSync
-			seq.isNitroSyncing = true
+			seq.isFabricSyncing = true
 			seq.replayBuffer = nil
-			slog.Debug("Nitro Sync (Llama): Fast-forwarding GPU", "tokens", len(toSync))
+			slog.Debug("Fabric Sync (Llama): Fast-forwarding GPU", "tokens", len(toSync))
 			slog.Info("NITRO BYPASS TRIGGERED", "tokens", len(toSync))
 		}
 
@@ -640,12 +647,12 @@ func (s *Server) processBatch(tokenBatch *llama.Batch, embedBatch *llama.Batch) 
 			continue
 		}
 
-		// If a catch-up batch finished, release the Nitro lock
-		// Only release the Nitro Lock once the GPU has fully synced (empty inputs)
+		// If a catch-up batch finished, release the Fabric lock
+		// Only release the Fabric Lock once the GPU has fully synced (empty inputs)
 		// Check for Query-Specific Sequence Bypass
-		if s.Index != nil && len(seq.inputs) == 0 && seq.numPredicted == 0 && !seq.isNitroSyncing {
+		if s.Index != nil && len(seq.inputs) == 0 && seq.numPredicted == 0 && !seq.isFabricSyncing {
 			slog.Debug("Checking Query Index", "sig", seq.promptSig)
-			if cachedTokens, ok := s.Index.PredictSequence(seq.promptSig); ok {
+			if cachedTokens, ok := s.Index.PredictSequence(seq.promptTokens, seq.promptString); ok {
 				slog.Info("PREDICTED WHOLE SEQUENCE FROM QUERY INDEX", "tokens", len(cachedTokens))
 				for _, t := range cachedTokens {
 					piece := s.model.TokenToPiece(int(t))
@@ -659,13 +666,13 @@ func (s *Server) processBatch(tokenBatch *llama.Batch, embedBatch *llama.Batch) 
 			}
 		}
 
-		if seq.isNitroSyncing && len(seq.inputs) == 0 {
-			seq.isNitroSyncing = false
+		if seq.isFabricSyncing && len(seq.inputs) == 0 {
+			seq.isFabricSyncing = false
 			if seq.isDetached {
 				s.removeSequence(i, seq.doneReason)
 				continue
 			}
-			slog.Debug("Nitro Sync (Llama) Complete", "seqIdx", i)
+			slog.Debug("Fabric Sync (Llama) Complete", "seqIdx", i)
 		}
 
 		// After calling Decode, pending inputs are now in the cache
@@ -676,7 +683,7 @@ func (s *Server) processBatch(tokenBatch *llama.Batch, embedBatch *llama.Batch) 
 
 		// don't sample prompt processing
 		if len(seq.inputs) != 0 {
-			if !seq.isNitroSyncing {
+			if !seq.isFabricSyncing {
 				seq.processingDuration += time.Since(t)
 			}
 			continue
@@ -705,6 +712,7 @@ func (s *Server) processBatch(tokenBatch *llama.Batch, embedBatch *llama.Batch) 
 		token := seq.samplingCtx.Sample(s.lc, seq.iBatch)
 		seq.samplingCtx.Accept(token, true)
 		piece := s.model.TokenToPiece(token)
+		seq.responseString += piece // Collect research text for indexing
 
 		// --- NITRO LEARNING ---
 		if s.Index != nil {
@@ -1192,6 +1200,27 @@ func Execute(args []string) error {
 	mux.HandleFunc("/completion", server.completion)
 	mux.HandleFunc("/health", server.health)
 
+	// LOAD SEMANTIC INDEX (CODATA Fabric)
+	if os.Getenv("OLLAMA_FUZZY_NAVIGATION") == "1" {
+		slog.Info("CODATA Fabric: Heartbeat - Engine Active (Fuzzy Navigation Enabled)")
+		indexPath := filepath.Join(llm.GetIndexDir(), "codata_stable.nav")
+		if idx, err := llm.LoadWeightIndex(indexPath); err == nil {
+			server.Index = idx
+			slog.Info("CODATA Fabric: Loaded existing semantic index", "path", indexPath, "sequences", len(idx.SequenceCache))
+		} else {
+			server.Index = &llm.WeightIndex{
+				ModelPath:     filepath.Base(*mpath),
+				Method:        "bit-signature",
+				ShortcutCache: make(map[uint64]int32),
+				Metadata:      make(map[string]any),
+				SequenceCache: make(map[uint64][]int32),
+				PromptSignatures: make(map[uint64][]uint64),
+			}
+		}
+	} else {
+		slog.Warn("CODATA Fabric: Navigation Layer inactive (OLLAMA_FUZZY_NAVIGATION not set)")
+	}
+
 	httpServer := http.Server{
 		Handler: mux,
 	}
@@ -1201,6 +1230,51 @@ func Execute(args []string) error {
 		log.Fatal("server error:", err)
 		return err
 	}
-
 	return nil
+}
+
+func (s *Server) saveMirror(sig []uint64, prompt string, tokens []int32) {
+	dir := os.Getenv("OLLAMA_MIRROR_DIRECTORY")
+	if dir == "" {
+		dir = "/tmp/mirror"
+	}
+	
+	// Only proceed if the directory exists or we can create it (if env was set)
+	if os.Getenv("OLLAMA_MIRROR_DIRECTORY") == "" {
+		if _, err := os.Stat(dir); os.IsNotExist(err) {
+			return
+		}
+	}
+
+	log.Printf("CODATA Mirror: Capturing trace to %s", dir)
+
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		slog.Error("Mirror: failed to create directory", "dir", dir, "error", err)
+		return
+	}
+
+	type MirrorTrace struct {
+		Prompt    string  `json:"prompt"`
+		Tokens    []int32 `json:"tokens"`
+		Timestamp string  `json:"timestamp"`
+	}
+
+	trace := MirrorTrace{
+		Prompt:    prompt,
+		Tokens:    tokens,
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
+
+	data, err := json.MarshalIndent(trace, "", "  ")
+	if err != nil {
+		return
+	}
+
+	key := uint64(0)
+	for _, x := range sig { key ^= x }
+
+	filename := filepath.Join(dir, fmt.Sprintf("mirror_%x.json", key))
+	if err := os.WriteFile(filename, data, 0644); err != nil {
+		slog.Error("Mirror: failed to write file", "file", filename, "error", err)
+	}
 }
