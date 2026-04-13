@@ -640,9 +640,12 @@ func (s *Server) forwardBatch(pendingBatch batchState) (nextBatch batchState, er
 			continue
 		}
 
-		// Logical re-tagging (redundant but safe)
-		if seq.bypassed && !seq.isFinished {
-			s.removeSequenceUnlocked(seqIdx, llm.DoneReasonStop)
+		// Fabric-8: Absolute Bypass/Finish Guard
+		// Any sequence already handled by the Fabric MUST not enter the GPU batch loop
+		if seq.bypassed || seq.isFinished {
+			if !seq.isFinished {
+				s.removeSequenceUnlocked(seqIdx, llm.DoneReasonStop)
+			}
 			continue
 		}
 
@@ -881,7 +884,12 @@ func (s *Server) forwardBatch(pendingBatch batchState) (nextBatch batchState, er
 			seq.pendingInputs = append(seq.pendingInputs, inp)
 		}
 
-		seq.inputs = seq.inputs[len(seq.pendingInputs):]
+		// Fabric-8: Turn-safe input slicing
+		if len(seq.inputs) >= len(seq.pendingInputs) {
+			seq.inputs = seq.inputs[len(seq.pendingInputs):]
+		} else {
+			seq.inputs = nil
+		}
 	}
 
 	startedAt := time.Now()
