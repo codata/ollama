@@ -147,7 +147,7 @@ var errorInputTooLong = errors.New("the input length exceeds the context length"
 func (s *Server) NewSequence(prompt string, images []llm.ImageData, params NewSequenceParams) (*Sequence, error) {
 	s.ready.Wait()
 
-	// CODATA Fabric: Semantic Memory Injection
+	// CODATA Fabric: Semantic Memory & Structural Audit
 	if s.Index != nil {
 		// Temporary tokenization to find matches
 		tempInputs, _, _, _ := s.inputs(prompt, nil)
@@ -155,11 +155,15 @@ func (s *Server) NewSequence(prompt string, images []llm.ImageData, params NewSe
 			tInts := make([]int32, len(tempInputs))
 			for i, t := range tempInputs { tInts[i] = t.Token }
 			
-			if mem, sim, ok := s.Index.SearchMemory(tInts); ok {
+			// 1. Structural Audit: If we already have a direct solution, don't mutate the prompt
+			if _, ok := s.Index.PredictSequence(tInts, prompt); ok {
+				log.Printf("CODATA Fabric: Pre-Injection Structural Hit -> Prioritizing Direct Bypass")
+			} else if mem, sim, ok := s.Index.SearchMemory(tInts); ok {
+				// 2. Knowledge Injection: Mutate prompt for research context if no direct answer exists
 				log.Printf("CODATA Fabric: Memory INJECT (Sim %.2f) -> Picked up cached knowledge as input", sim)
 				prompt = "Reference Database Piece: " + mem + "\n\n" + prompt
 			} else {
-				log.Printf("CODATA Fabric: No memory injection (best sim was low)")
+				log.Printf("CODATA Fabric: No memory injection or direct hit")
 			}
 		}
 	}
