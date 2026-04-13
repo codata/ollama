@@ -88,6 +88,6 @@ done
 
 echo ""
 echo "--- 🔍 VERIFYING TOTAL BYPASSES ---"
-BYPASS_COUNT=$(grep -c "Nitro-8: Sequence Index HIT" "$BASE_DIR/ollama_diverse.log" || echo "0")
-echo "Total Nitro Bypass hits found across all prompts: $BYPASS_COUNT"
+BYPASS_COUNT=$(grep -ic "CODATA Fabric" "$BASE_DIR/ollama_diverse.log" || echo "0")
+echo "Total CODATA Fabric hits found across all prompts: $BYPASS_COUNT"
 echo "--- 🎉 TEST COMPLETED ---"

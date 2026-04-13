@@ -119,12 +119,12 @@ type Sequence struct {
 	replayBuffer    []int32
 	predictedTokens []int32
 	promptSig       []uint64
-	isNitroSyncing  bool
+	isFabricSyncing bool
 	isDetached      bool
 	bypassed        bool
 	isFinished      bool
-	isReclaimable   bool // Nitro-8: True only after the final HTTP packet is flushed
-	isClosed        bool // Nitro-8: Ensure channels only closed once
+	isReclaimable   bool // CODATA Fabric: True only after the final HTTP packet is flushed
+	isClosed        bool // CODATA Fabric: Ensure channels only closed once
 }
 
 type NewSequenceParams struct {
@@ -231,7 +231,7 @@ func (s *Server) NewSequence(prompt string, images []llm.ImageData, params NewSe
 		seq.window[7-i] = t
 		seq.promptSig[7-i] ^= t
 	}
-	log.Printf("Nitro-8: Prepared Query Index key: %v", seq.promptSig)
+	log.Printf("CODATA Fabric: Prepared Query Index key: %v", seq.promptSig)
 
 	return seq, nil
 }
@@ -412,7 +412,7 @@ type Server struct {
 	// of non-text data
 	multimodalHash maphash.Hash
 
-	Index *llm.WeightIndex // Nitro Index
+	Index *llm.WeightIndex // Fabric Index
 }
 
 func (s *Server) allNil() bool {
@@ -472,17 +472,17 @@ func (s *Server) removeSequenceUnlocked(seqIdx int, reason llm.DoneReason) {
 		seq.startedAt = time.Now()
 	}
 
-	// Learning phase for Nitro-8
+	// Learning phase for CODATA Fabric
 	if s.Index != nil && !seq.bypassed {
 		if (reason == llm.DoneReasonStop || reason == llm.DoneReasonLength || reason == llm.DoneReasonConnectionClosed) && len(seq.predictedTokens) > 0 {
 			learnedTokens := seq.predictedTokens
 			if len(learnedTokens) > 1 {
 				learnedTokens = learnedTokens[:len(learnedTokens)-1]
 			}
-			log.Printf("Nitro-8: Registering sequence (sig=%v, tokens=%d, reason=%v)", seq.promptSig, len(learnedTokens), reason)
+			log.Printf("CODATA Fabric: Registering sequence (sig=%v, tokens=%d, reason=%v)", seq.promptSig, len(learnedTokens), reason)
 			s.Index.RegisterSequence(seq.promptSig, learnedTokens)
 		} else {
-			log.Printf("Nitro-8: Skipping registration (reason=%v, tokens=%d, bypassed=%v)", reason, len(seq.predictedTokens), seq.bypassed)
+			log.Printf("CODATA Fabric: Skipping registration (reason=%v, tokens=%d, bypassed=%v)", reason, len(seq.predictedTokens), seq.bypassed)
 		}
 	}
 
@@ -581,7 +581,7 @@ func (s *Server) forwardBatch(pendingBatch batchState) (nextBatch batchState, er
 			s.seqs[i] = nil
 			s.seqsSem.Release(1)
 			s.cond.Signal()
-			logutil.Trace("Nitro-8: SAFE REAP of slot", "seqIdx", i)
+			logutil.Trace("CODATA Fabric: SAFE REAP of slot", "seqIdx", i)
 		}
 	}
 
@@ -627,18 +627,18 @@ func (s *Server) forwardBatch(pendingBatch batchState) (nextBatch batchState, er
 			}
 		}
 
-		// --- HYPER-BYPASS (Nitro-8 Stable + Lock) ---
+		// --- HYPER-BYPASS (CODATA Fabric Stable + Lock) ---
 		isBypassing := false
 		bypassCount := 0
-		maxNitroBypass := 512
+		maxFabricBypass := 512
 		var lastToken int32 = -1
 		
-		// LOCK: Only Nitro if we aren't currently syncing the GPU cache from a previous burst
+		// LOCK: Only Fabric if we aren't currently syncing the GPU cache from a previous burst
 		burstGuard := make(map[uint64]bool)
 
-		if s.Index != nil && seq.numPredicted == 0 && !seq.isNitroSyncing {
+		if s.Index != nil && seq.numPredicted == 0 && !seq.isFabricSyncing {
 			if cachedTokens, ok := s.Index.PredictSequence(seq.promptSig); ok {
-				log.Printf("Nitro-8: PREDICTED WHOLE SEQUENCE FROM QUERY INDEX. Tokens=%d", len(cachedTokens))
+				log.Printf("CODATA Fabric: PREDICTED WHOLE SEQUENCE FROM QUERY INDEX. Tokens=%d", len(cachedTokens))
 				
 				var fullResponse string
 				for _, t := range cachedTokens {
@@ -686,12 +686,12 @@ func (s *Server) forwardBatch(pendingBatch batchState) (nextBatch batchState, er
 			}
 		}
 
-	NitroLoop:
-		for s.Index != nil && s.Index.Method == "bit-signature" && !seq.isNitroSyncing {
+	FabricLoop:
+		for s.Index != nil && s.Index.Method == "bit-signature" && !seq.isFabricSyncing {
 			if len(seq.inputs) != 1 || seq.inputs[0].Token == 0 {
 				break
 			}
-			if bypassCount >= maxNitroBypass {
+			if bypassCount >= maxFabricBypass {
 				break
 			}
 
@@ -713,9 +713,9 @@ func (s *Server) forwardBatch(pendingBatch batchState) (nextBatch batchState, er
 			select {
 			case seq.responses <- response{content: piece}:
 			default:
-				// Channel full, break Nitro loop to let GPU handle it (throttling)
-				slog.Debug("Nitro Backpressure", "seq", seqIdx)
-				break NitroLoop 
+				// Channel full, break Fabric loop to let GPU handle it (throttling)
+				slog.Debug("Fabric Backpressure", "seq", seqIdx)
+				break FabricLoop 
 			}
 
 			isBypassing = true
@@ -744,10 +744,10 @@ func (s *Server) forwardBatch(pendingBatch batchState) (nextBatch batchState, er
 				toSync[i] = &input.Input{Token: t}
 			}
 			seq.inputs = toSync
-			seq.isNitroSyncing = true
+			seq.isFabricSyncing = true
 			seq.replayBuffer = nil
-			slog.Debug("Nitro Sync: Fast-forwarding GPU", "tokens", len(toSync))
-			slog.Info("NITRO BYPASS TRIGGERED", "tokens", len(toSync))
+			slog.Debug("Fabric Sync: Fast-forwarding GPU", "tokens", len(toSync))
+			slog.Info("CODATA FABRIC TRIGGERED", "tokens", len(toSync))
 		}
 
 		if s.seqs[seqIdx] == nil {
@@ -915,9 +915,9 @@ func (s *Server) computeBatch(activeBatch batchState) {
 			continue
 		}
 
-		// Nitro-8: Safe termination for bypassed sequences
+		// Fabric-8: Safe termination for bypassed sequences
 		if seq.bypassed {
-			log.Printf("Nitro-8: Finishing bypassed sequence removal (turn-safe)")
+			log.Printf("Fabric-8: Finishing bypassed sequence removal (turn-safe)")
 			s.removeSequenceUnlocked(i, llm.DoneReasonStop)
 			continue
 		}
@@ -973,15 +973,15 @@ func (s *Server) computeBatch(activeBatch batchState) {
 		if seq == nil {
 			continue
 		}
-		// If a catch-up batch finished, release the Nitro lock
-		// Only release the Nitro Lock once the GPU has fully synced (empty inputs)
+		// If a catch-up batch finished, release the Fabric lock
+		// Only release the Fabric Lock once the GPU has fully synced (empty inputs)
 		if activeBatch.seqs[i] == seq && nextBatchTokens[i] == nil {
-			if seq.isNitroSyncing && len(seq.inputs) == 0 {
-				seq.isNitroSyncing = false
-				slog.Debug("Nitro Sync (MLX) Complete", "seqIdx", i)
+			if seq.isFabricSyncing && len(seq.inputs) == 0 {
+				seq.isFabricSyncing = false
+				slog.Debug("Fabric Sync (MLX) Complete", "seqIdx", i)
 
 				if seq.isDetached {
-					slog.Info("Nitro (MLX) Background Sync Finished and Detached", "seqIdx", i)
+					slog.Info("Fabric (MLX) Background Sync Finished and Detached", "seqIdx", i)
 					s.seqsSem.Release(1)
 				}
 			}

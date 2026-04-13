@@ -81,13 +81,14 @@ wait
 END_PARALLEL=$(date +%s)
 TOTAL_TIME=$((END_PARALLEL - START_PARALLEL))
 
-echo "--- 🔍 VERIFYING STABILITY ---"
-BYPASS_COUNT=$(grep -c "NITRO BYPASS" ../ollama_parallel.log)
-echo "Total Nitro Bypass triggers in log: $BYPASS_COUNT"
+echo ""
+echo "--- 🔍 VERIFYING TOTAL BYPASSES ---"
+BYPASS_COUNT=$(grep -ic "CODATA Fabric" "$BASE_DIR/ollama_parallel.log" || echo "0")
+echo "Total CODATA Fabric Bypass hits found: $BYPASS_COUNT"
 echo "Total parallel time: ${TOTAL_TIME}s"
 
 if [ $BYPASS_COUNT -ge 10 ]; then
-    echo "✅ SUCCESS: Parallel Nitro bypass is stable!"
+    echo "✅ SUCCESS: Parallel CODATA Fabric Bypass is stable!"
 else
     echo "⚠️ WARNING: Some requests might have missed bypass. Count: $BYPASS_COUNT"
 fi
