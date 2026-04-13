@@ -644,6 +644,9 @@ func (s *Server) forwardBatch(pendingBatch batchState) (nextBatch batchState, er
 			continue
 		}
 
+		// Reset turn state
+		seq.pendingInputs = []*input.Input{}
+
 		// Fabric-8: Absolute Bypass/Finish Guard
 		// Any sequence already handled by the Fabric MUST not enter the GPU batch loop
 		if seq.bypassed || seq.isFinished {
